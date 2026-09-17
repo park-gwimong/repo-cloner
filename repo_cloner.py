@@ -61,38 +61,6 @@ def _ascii_host(host: str, *, ipv6: bool = False) -> str | None:
     return host.lower() if re.fullmatch(pattern, host) else None
 
 
-def load_env(path: Path) -> None:
-    """Load single-line dotenv assignments without replacing existing variables."""
-    try:
-        content = path.read_text(encoding="utf-8-sig")
-    except FileNotFoundError:
-        return
-    values = {}
-    for number, line in enumerate(content.splitlines(), 1):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        match = re.fullmatch(r"(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)", line)
-        if not match:
-            raise ClonerError(f"Invalid .env assignment at {path}:{number}")
-        key, value = match.groups()
-        if value.startswith(("'", '"')):
-            end = value.find(value[0], 1)
-            tail = value[end + 1:].strip()
-            if end < 0 or (tail and not tail.startswith("#")):
-                raise ClonerError(f"Invalid .env quoted value at {path}:{number}")
-            value = value[1:end]
-        else:
-            value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
-            if value.startswith("#"):
-                value = ""
-        if "\x00" in value:
-            raise ClonerError(f"Invalid .env value at {path}:{number}")
-        values[key] = value
-    for key, value in values.items():
-        os.environ.setdefault(key, value)
-
-
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -716,14 +684,21 @@ class Api:
         self.base = base.rstrip("/")
         self.headers = {"Accept": "application/json", "User-Agent": "project-repo-cloner"}
         self.opener = build_opener(NoRedirect())
-        if source.get("tokenEnv"):
-            token = os.environ.get(source["tokenEnv"])
-            if not token:
-                raise ClonerError(f"Empty environment variable: {source['tokenEnv']}")
-            if source.get("usernameEnv"):
-                username = os.environ.get(source["usernameEnv"])
-                if not username:
-                    raise ClonerError(f"Empty environment variable: {source['usernameEnv']}")
+        if "tokenEnv" in source or "usernameEnv" in source:
+            raise ClonerError("Use token and username directly in the JSON source; environment references are no longer supported")
+        if "username" in source and "token" not in source:
+            raise ClonerError("username requires token in the JSON source")
+        for key in ("token", "username"):
+            if key in source:
+                value = required(source, key)
+                if any(ord(char) < 32 or ord(char) == 127 for char in value):
+                    raise ClonerError(f"Invalid control character in setting: {key}")
+        if "token" in source:
+            token = source["token"]
+            if "username" in source:
+                username = source["username"]
+                if ":" in username:
+                    raise ClonerError("username must not contain a colon")
                 encoded = base64.b64encode(f"{username}:{token}".encode()).decode()
                 self.headers["Authorization"] = f"Basic {encoded}"
             else:
@@ -878,7 +853,6 @@ def _patterns(source: dict, key: str) -> list[str]:
 
 def run(config_path: Path, dry_run: bool = False, destination: Path | None = None) -> int:
     config = json.loads(config_path.read_text(encoding="utf-8-sig"))
-    load_env(config_path.resolve().parent / ".env")
     protocol = config.get("protocol", "ssh")
     if protocol not in {"ssh", "https"}:
         raise ClonerError("protocol must be ssh or https")

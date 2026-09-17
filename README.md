@@ -17,41 +17,16 @@ Python 3.10 이상과 Git이 필요하며, 런타임 외부 라이브러리는 �
       "provider": "bitbucket-cloud",
       "workspace": "my-workspace",
       "project": "PROJ",
-      "usernameEnv": "BITBUCKET_CLOUD_EMAIL",
-      "tokenEnv": "BITBUCKET_CLOUD_TOKEN"
+      "username": "you@example.com",
+      "token": "YOUR_TOKEN"
     }
   ]
 }
 ```
 
-API 인증 정보는 환경변수로 전달합니다. Bitbucket Cloud API 토큰은 계정 이메일과 함께 사용합니다.
-
-설정 JSON 파일과 같은 폴더에 `.env`를 작성하면 실행 시 자동으로 읽습니다.
-`sample.env`를 `.env`로 복사하고 사용하는 서비스의 인증 값을 입력하세요. GitHub, Bitbucket Cloud, Bitbucket Server / Data Center 항목이 포함되어 있습니다. 기존 `.env`가 있다면 필요한 항목만 추가하세요.
-
-```dotenv
-BITBUCKET_CLOUD_EMAIL=you@example.com
-BITBUCKET_CLOUD_TOKEN=YOUR_TOKEN
-```
-
-이미 터미널에 설정된 환경변수가 있으면 해당 값을 우선하며, `.env`가 없어도 실행할 수 있습니다.
-UTF-8(BOM 포함), 빈 줄, `#` 주석, `export KEY=value`, 작은따옴표와 큰따옴표로 감싼 한 줄 값을 지원합니다.
-따옴표 밖의 공백 뒤 `#`는 주석으로 처리합니다. 변수 치환, 이스케이프 변환, 여러 줄 값은 지원하지 않습니다.
-잘못된 형식은 값 대신 파일 경로와 줄 번호로 안내합니다. `.env`는 Git 제외 대상입니다.
-
-터미널에서 직접 환경변수를 설정할 수도 있습니다.
-
-```bash
-# macOS / Linux
-export BITBUCKET_CLOUD_EMAIL='you@example.com'
-export BITBUCKET_CLOUD_TOKEN='YOUR_TOKEN'
-```
-
-```powershell
-# Windows 터미널에서 환경변수 설정
-$env:BITBUCKET_CLOUD_EMAIL = 'you@example.com'
-$env:BITBUCKET_CLOUD_TOKEN = 'YOUR_TOKEN'
-```
+API 인증 정보는 각 source의 `username`과 `token`에 직접 입력합니다.
+Bitbucket Cloud API 토큰은 `username`에 토큰을 발급한 계정 이메일을 입력합니다.
+`.env`와 환경변수는 API 인증에 사용하지 않습니다. `repositories.json`은 Git 제외 대상입니다.
 
 실행 코드는 모든 OS에서 동일합니다. 환경에 따라 `python` 대신 `python3`를 사용하세요.
 
@@ -99,7 +74,7 @@ D:/GitCopies/
 
 예를 들어 `C:/settings/repositories.json`의 `destination`이 `./clones`라면,
 어느 폴더에서 실행해도 `C:/settings/clones` 아래에 저장됩니다.
-설정 파일을 다른 폴더로 옮기면 상대 저장 위치와 자동 로드할 `.env` 위치도 달라집니다.
+설정 파일을 다른 폴더로 옮기면 상대 저장 위치도 달라집니다.
 
 ```powershell
 # Windows: 공백이 있는 경로는 따옴표로 감쌉니다.
@@ -164,7 +139,7 @@ API provider는 조회된 이름/slug, `git` provider는 직접 지정한 `name`
   "name": "team",
   "provider": "github",
   "organization": "YOUR_ORGANIZATION",
-  "tokenEnv": "GITHUB_TOKEN",
+  "token": "YOUR_TOKEN",
   "include": ["api-*", "web-?"],
   "exclude": ["*-old", "*-archive"]
 }
@@ -201,31 +176,22 @@ Git 실행과 폴더 생성은 없으며 API provider만 목록 조회를 위해
 | provider | 조회 단위 | 필수 설정 | API 인증 |
 | --- | --- | --- | --- |
 | `git` | 직접 지정한 URL 목록 | `repositories`: `name`·`url` 목록 | API 인증 없음; Git 접근 권한 필요 |
-| `github` | GitHub Organization | `organization` | `tokenEnv`: PAT 등 |
-| `bitbucket-cloud` | workspace 안의 프로젝트 | `workspace`, `project` | `usernameEnv`: 이메일, `tokenEnv`: API 토큰 |
-| `bitbucket-server` | Server / Data Center 프로젝트 | `baseUrl`, `project` | `tokenEnv`: 개인 액세스 토큰 |
+| `github` | GitHub Organization | `organization` | `token`: PAT 등 |
+| `bitbucket-cloud` | workspace 안의 프로젝트 | `workspace`, `project` | `username`: 이메일, `token`: API 토큰 |
+| `bitbucket-server` | Server / Data Center 프로젝트 | `baseUrl`, `project` | `token`: 개인 액세스 토큰 |
 
 여러 프로젝트는 `sources`에 추가합니다. source마다 고유한 `name`을 지정하세요.
 예제 파일에는 세 API 서비스와 직접 URL 지정 예제가 있습니다. 사용할 source만 남기세요.
 
-인증 환경변수는 `<서비스명>_TOKEN`, `<서비스명>_EMAIL` 형식으로 통일합니다. 토큰 종류는 서비스별로 다릅니다.
-
-| provider | `tokenEnv` | `usernameEnv` | 입력할 토큰 |
-| --- | --- | --- | --- |
-| `github` | `GITHUB_TOKEN` | 생략 | GitHub 개인 액세스 토큰 |
-| `bitbucket-cloud` | `BITBUCKET_CLOUD_TOKEN` | `BITBUCKET_CLOUD_EMAIL` | Bitbucket Cloud API 토큰 |
-| `bitbucket-server` | `BITBUCKET_SERVER_TOKEN` | 생략 | Server / Data Center 개인 액세스 토큰 |
-
-이전에 사용한 `BITBUCKET_API_TOKEN`, `BITBUCKET_EMAIL`은 각각 `BITBUCKET_CLOUD_TOKEN`, `BITBUCKET_CLOUD_EMAIL`로 변경했습니다. 기존 터미널 환경변수도 새 이름으로 설정하세요.
-코드는 `tokenEnv`와 `usernameEnv`에 지정한 이름을 그대로 읽으므로, 별도 설정 파일에서 기존 이름이나 사용자 지정 이름을 사용하는 것도 가능합니다.
+각 source에 인증 값을 직접 지정합니다. 여러 source는 같은 값을 사용하거나 서로 다른 값을 사용할 수 있습니다.
 
 - `destination`: 저장 위치. 상대 경로는 설정 파일 위치 기준입니다.
 - `protocol`: `ssh`(기본값) 또는 `https`.
 - `project`: Bitbucket의 표시 이름이 아닌 프로젝트 **키**.
-- `tokenEnv`, `usernameEnv`: 비밀 값 자체가 아닌 환경변수 **이름**.
+- `token`, `username`: 인증에 사용할 **실제 값**. 둘 다 생략하면 익명 조회, `token`만 있으면 Bearer 인증, 둘 다 있으면 Basic 인증을 사용합니다. 빈 값은 허용하지 않습니다. 이전 `tokenEnv`·`usernameEnv` 설정은 오류로 안내합니다.
 - `github.apiUrl`: Enterprise 사용 시 `https://github.example.com/api/v3` 지정.
 - `bitbucket-server.baseUrl`: 예: `https://bitbucket.example.com` 또는 context path를 포함한 주소.
-- 공개 저장소를 익명 조회하려면 `tokenEnv`를 생략합니다. Bearer 방식의 Bitbucket Cloud access token 사용 시 `usernameEnv`를 생략합니다.
+- 공개 저장소를 익명 조회하려면 `token`를 생략합니다. Bearer 방식의 Bitbucket Cloud access token 사용 시 `username`를 생략합니다.
 
 `github` provider는 Organization 전체를 조회한 뒤 이름 필터를 적용합니다. GitHub Projects 보드 및 개인 계정 단위 자동 조회는 지원하지 않습니다. 개인 저장소는 `git` provider로 URL을 지정할 수 있습니다. 토큰 권한으로 조회 가능한 저장소만 포함되며, 모든 페이지를 순회합니다. 조직의 토큰 승인이나 SSO 설정에 따라 접근 범위가 제한될 수 있습니다.
 

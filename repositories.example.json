@@ -6,7 +6,7 @@
       "name": "github-my-team",
       "provider": "github",
       "organization": "YOUR_ORGANIZATION",
-      "tokenEnv": "GITHUB_TOKEN",
+      "token": "YOUR_TOKEN",
       "include": [],
       "exclude": ["*-archive"]
     },
@@ -15,15 +15,15 @@
       "provider": "bitbucket-cloud",
       "workspace": "YOUR_WORKSPACE",
       "project": "PROJECT_KEY",
-      "usernameEnv": "BITBUCKET_CLOUD_EMAIL",
-      "tokenEnv": "BITBUCKET_CLOUD_TOKEN"
+      "username": "you@example.com",
+      "token": "YOUR_TOKEN"
     },
     {
       "name": "company-project-b",
       "provider": "bitbucket-server",
       "baseUrl": "https://bitbucket.example.com",
       "project": "PROJECT_KEY",
-      "tokenEnv": "BITBUCKET_SERVER_TOKEN"
+      "token": "YOUR_TOKEN"
     },
     {
       "name": "personal",

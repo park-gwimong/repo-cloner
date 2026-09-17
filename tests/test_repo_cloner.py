@@ -86,7 +86,7 @@ class ProviderTests(unittest.TestCase):
 
     def test_auth_and_cross_host_rejection(self):
         with patch.dict("os.environ", {"TEST_TOKEN": "secret", "TEST_EMAIL": "me@example.com"}):
-            api = app.Api("https://example.com", {"tokenEnv": "TEST_TOKEN", "usernameEnv": "TEST_EMAIL"})
+            api = app.Api("https://example.com", {"token": "secret", "username": "me@example.com"})
         expected = base64.b64encode(b"me@example.com:secret").decode()
         self.assertEqual(api.headers["Authorization"], "Basic " + expected)
         for url in ("https://other.example.com/page", "http://example.com/page"):
@@ -96,7 +96,7 @@ class ProviderTests(unittest.TestCase):
     def test_missing_token(self):
         with patch.dict("os.environ", {}, clear=True):
             with self.assertRaises(app.ClonerError):
-                app.Api("https://example.com", {"tokenEnv": "MISSING"})
+                app.Api("https://example.com", {"token": ""})
 
 
 class RemoteIdentityTests(unittest.TestCase):
