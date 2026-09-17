@@ -19,6 +19,40 @@ def bb_item(name="repo", protocol="ssh"):
 
 
 class ProviderTests(unittest.TestCase):
+    def test_explicit_repositories_preserve_names_and_urls_without_api(self):
+        source = {
+            "provider": "git",
+            "repositories": [
+                {"name": "my-copy", "url": "git@github.com:org/original.git"},
+                {"name": "web", "url": "https://example.com/team/web.git"},
+            ],
+        }
+        with patch.object(app, "Api") as api:
+            self.assertEqual(list(app.repositories(source, "ssh")), [
+                app.Repository("my-copy", "git@github.com:org/original.git"),
+                app.Repository("web", "https://example.com/team/web.git"),
+            ])
+        api.assert_not_called()
+
+    def test_explicit_repositories_validate_entire_list_before_yielding(self):
+        valid = {"name": "first", "url": "https://example.com/first.git"}
+        for invalid in (
+            {"name": "FIRST", "url": "https://example.com/other.git"},
+            {"name": "../escape", "url": "https://example.com/other.git"},
+            {"name": "bad", "url": "ext::command"},
+            {"name": "bad", "url": "/local/repo"},
+            {"name": "bad", "url": "https://secret@example.com/repo.git"},
+            {"name": "bad"},
+            "not an object",
+        ):
+            with self.subTest(invalid=invalid):
+                iterator = app.repositories({"provider": "git", "repositories": [valid, invalid]}, "ssh")
+                with self.assertRaises(app.ClonerError):
+                    next(iterator)
+        for invalid in (None, [], "https://example.com/repo.git"):
+            with self.subTest(entries=invalid), self.assertRaises(app.ClonerError):
+                list(app.repositories({"provider": "git", "repositories": invalid}, "ssh"))
+
     def test_github_pagination(self):
         item = {"name": "repo", "ssh_url": "git@github.com:o/repo.git"}
         with patch.object(app.Api, "get", side_effect=[[item] * 100, [item]]) as get:
@@ -293,6 +327,33 @@ class ExistingUpdateTests(unittest.TestCase):
         self.assertEqual(self.update(), "updated")
         self.assertEqual(self.fixture.target_head(), fetched)
         self.assertEqual((self.fixture.target / "file.txt").read_text(), "two\n")
+
+    def test_explicit_selection_clones_and_updates_at_overridden_destination(self):
+        self.fixture.push_change("selected update\n")
+        fetched = self.fixture.remote_head()
+        config = self.fixture.root / "selection.json"
+        config.write_text(json.dumps({
+            "destination": str(self.fixture.root / "unused"),
+            "sources": [{
+                "name": self.fixture.root.name,
+                "provider": "git",
+                "include": ["target", "new-copy"],
+                "repositories": [
+                    {"name": name, "url": str(self.fixture.remote)}
+                    for name in ("target", "new-copy", "excluded")
+                ],
+            }],
+        }), encoding="utf-8")
+        with patch.object(app, "_remote_identity", side_effect=self.local_identity):
+            self.assertEqual(app.run(config, destination=self.fixture.root.parent), 0)
+        self.assertEqual(self.fixture.target_head(), fetched)
+        self.assertEqual(
+            self.fixture.git(self.fixture.root / "new-copy", "rev-parse", "HEAD").stdout.strip(),
+            fetched,
+        )
+        self.assertFalse((self.fixture.root / "excluded").exists())
+        self.assertFalse((self.fixture.root / "unused").exists())
+        self.assertIn("cloned=1 updated=1 unchanged=0 skipped=1 planned=0 failed=0", self.output.getvalue())
 
     def test_same_tip_is_unchanged(self):
         head = self.fixture.target_head()
@@ -1187,6 +1248,168 @@ class CloneFlowTests(unittest.TestCase):
             "cloned=1 updated=1 unchanged=1 skipped=1 planned=1 failed=1",
             self.output.getvalue(),
         )
+
+
+class DestinationSelectionTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.config = self.root / "settings" / "repos.json"
+        self.config.parent.mkdir()
+        self.data = {
+            "destination": "../copies",
+            "sources": [{
+                "name": "chosen",
+                "provider": "git",
+                "repositories": [
+                    {"name": "renamed", "url": "git@github.com:org/original.git"},
+                ],
+            }],
+        }
+        self.output = io.StringIO()
+        stdout = redirect_stdout(self.output)
+        stderr = redirect_stderr(self.output)
+        stdout.__enter__()
+        stderr.__enter__()
+        self.addCleanup(stderr.__exit__, None, None, None)
+        self.addCleanup(stdout.__exit__, None, None, None)
+
+    def save(self):
+        self.config.write_text(json.dumps(self.data), encoding="utf-8")
+
+    def test_config_relative_destination_and_offline_preview(self):
+        self.save()
+        with patch.object(app, "Api") as api, \
+                patch.object(app.subprocess, "run") as git, \
+                patch.object(app.tempfile, "TemporaryDirectory") as temporary:
+            self.assertEqual(app.run(self.config, True), 0)
+        api.assert_not_called()
+        git.assert_not_called()
+        temporary.assert_not_called()
+        target = self.root / "copies" / "chosen" / "renamed"
+        self.assertIn(f"PLAN  CLONE git@github.com:org/original.git -> {target}", self.output.getvalue())
+        self.assertFalse(target.parent.exists())
+
+    def test_cli_relative_destination_uses_working_directory(self):
+        self.save()
+        old_cwd = Path.cwd()
+        os.chdir(self.root)
+        try:
+            with patch("sys.argv", [
+                "repo_cloner.py", "--config", str(self.config),
+                "--destination", "command copies", "--dry-run",
+            ]):
+                self.assertEqual(app.main(), 0)
+        finally:
+            os.chdir(old_cwd)
+        self.assertIn(str(self.root / "command copies" / "chosen" / "renamed"), self.output.getvalue())
+        self.assertFalse((self.root / "command copies").exists())
+        self.assertFalse((self.root / "copies").exists())
+
+    def test_absolute_destination_overrides_config_and_routes_real_run(self):
+        self.save()
+        destination = self.root / "absolute copies"
+        with patch.object(app.shutil, "which", return_value="git"), \
+                patch.object(app, "clone", return_value="cloned") as clone:
+            self.assertEqual(app.run(self.config, destination=destination), 0)
+        clone.assert_called_once_with(
+            app.Repository("renamed", "git@github.com:org/original.git"),
+            destination / "chosen", False,
+        )
+
+    def test_config_destination_expands_home(self):
+        self.data["destination"] = "~/copies"
+        self.save()
+        with patch.dict(os.environ, {"HOME": str(self.root), "USERPROFILE": str(self.root)}):
+            self.assertEqual(app.run(self.config, True), 0)
+        self.assertIn(str(self.root / "copies" / "chosen" / "renamed"), self.output.getvalue())
+
+    def test_filters_are_case_sensitive_and_exclude_wins(self):
+        source = self.data["sources"][0]
+        source["include"] = ["api-*", "web-?"]
+        source["exclude"] = ["*-old"]
+        source["repositories"] = [
+            {"name": name, "url": f"https://example.com/{name}.git"}
+            for name in ("api-core", "api-old", "web-a", "API-extra", "notes")
+        ]
+        self.save()
+        with patch.object(app, "clone", return_value="planned") as clone:
+            self.assertEqual(app.run(self.config, True), 0)
+        self.assertEqual([call.args[0].name for call in clone.call_args_list], ["api-core", "web-a"])
+        self.assertIn("skipped=3 planned=2 failed=0", self.output.getvalue())
+
+    def test_exclude_only_can_select_nothing_without_creating_folders(self):
+        self.data["sources"][0]["exclude"] = ["*"]
+        self.save()
+        with patch.object(app, "clone") as clone:
+            self.assertEqual(app.run(self.config, True), 0)
+        clone.assert_not_called()
+        self.assertIn("skipped=1 planned=0 failed=0", self.output.getvalue())
+        self.assertFalse((self.root / "copies").exists())
+
+    def test_api_name_errors_do_not_abort_filtered_repository_processing(self):
+        self.data["sources"][0].update({
+            "provider": "github", "organization": "org", "include": ["*"],
+        })
+        self.save()
+        valid = app.Repository("valid", "https://example.com/valid.git")
+        with patch.object(app, "repositories", return_value=[
+            app.Repository(None, "https://example.com/bad.git"),
+            app.Repository("../escape", "https://example.com/bad.git"),
+            valid,
+        ]), patch.object(app, "clone", return_value="planned") as clone:
+            self.assertEqual(app.run(self.config, True), 1)
+        clone.assert_called_once_with(valid, self.root / "copies" / "chosen", True)
+        self.assertIn("skipped=0 planned=1 failed=2", self.output.getvalue())
+
+    def test_invalid_patterns_fail_before_listing_or_cloning(self):
+        for key in ("include", "exclude"):
+            for invalid in ("*", None, [""], ["  "], [1]):
+                with self.subTest(key=key, invalid=invalid):
+                    self.data["sources"][0][key] = invalid
+                    self.save()
+                    with patch.object(app, "repositories") as repositories, \
+                            patch.object(app, "clone") as clone, \
+                            self.assertRaises(app.ClonerError):
+                        app.run(self.config, True)
+                    repositories.assert_not_called()
+                    clone.assert_not_called()
+            del self.data["sources"][0][key]
+
+    def test_invalid_destination_is_reported_before_listing(self):
+        for invalid in ("", " ", None, 12, []):
+            with self.subTest(destination=invalid):
+                self.data["destination"] = invalid
+                self.save()
+                with patch.object(app, "repositories") as repositories, \
+                        self.assertRaises(app.ClonerError):
+                    app.run(self.config, True)
+                repositories.assert_not_called()
+
+    def test_invalid_explicit_source_does_not_block_the_next_source(self):
+        self.data["sources"].insert(0, {
+            "name": "invalid", "provider": "git",
+            "repositories": [{"name": "bad", "url": "ext::command"}],
+        })
+        self.save()
+        self.assertEqual(app.run(self.config, True), 1)
+        self.assertIn("planned=1 failed=1", self.output.getvalue())
+
+    def test_existing_preview_is_unverified_and_redacts_invalid_url(self):
+        target = self.root / "renamed"
+        target.mkdir()
+        with patch.object(app.subprocess, "run") as git, \
+                patch.object(app.tempfile, "TemporaryDirectory") as temporary:
+            self.assertEqual(app.clone(
+                app.Repository("renamed", "https://secret@example.com/repo.git"),
+                self.root, True,
+            ), "planned")
+        git.assert_not_called()
+        temporary.assert_not_called()
+        self.assertIn("UPDATE?", self.output.getvalue())
+        self.assertIn("eligibility not checked", self.output.getvalue())
+        self.assertNotIn("secret", self.output.getvalue())
 
 
 if __name__ == "__main__":

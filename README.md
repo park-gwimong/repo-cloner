@@ -1,6 +1,6 @@
 # Project Repo Cloner
 
-GitHub 조직과 Bitbucket 프로젝트에 속한 저장소를 일괄 clone하는 Python CLI입니다.
+GitHub 조직·Bitbucket 프로젝트 또는 직접 지정한 Git URL 목록을 일괄 clone하고 안전하게 갱신하는 Python CLI입니다.
 Python 3.10 이상과 Git이 필요하며, 런타임 외부 라이브러리는 없습니다. Windows, macOS, Linux에서 사용할 수 있습니다.
 
 ## 빠른 시작
@@ -71,15 +71,142 @@ repo-cloner --config repositories.json --dry-run
 repo-cloner --config repositories.json
 ```
 
+## 어디에서 가져와 어디에 저장하나요?
+
+이 도구의 복제 대상은 **원격 Git 저장소**입니다. 일반 로컬 폴더 복사나
+미커밋 작업까지 포함하는 백업 도구는 아닙니다.
+
+```text
+최종 경로 = 저장 루트 / source.name / 저장소 이름
+
+D:/GitCopies/
+└── personal/                  ← source.name
+    └── repo-cloner/            ← 원격 저장소 이름 또는 직접 지정한 name
+        ├── .git/
+        └── ...
+```
+
+| 지정 방법 | 상대 경로 기준 | 예 |
+| --- | --- | --- |
+| JSON의 `destination` | 설정 파일이 있는 폴더 | `"destination": "../copies"` |
+| CLI의 `--destination` | 명령을 실행한 현재 폴더 | `--destination ./copies` |
+| 절대 경로 | 그대로 사용 | Windows `D:/GitCopies`, macOS `/Users/me/GitCopies`, Linux `/home/me/GitCopies` |
+
+`--destination`이 JSON보다 우선합니다. 둘 다 생략하면 설정 파일 옆 `clones`가
+저장 루트입니다. `~`는 사용자 홈으로 확장하지만 JSON 안의 `$HOME`·`%USERPROFILE%`
+같은 환경변수 표현은 치환하지 않습니다. JSON의 Windows 경로는 `D:/GitCopies`처럼
+슬래시를 쓰거나 `D:\\GitCopies`처럼 역슬래시를 이스케이프하세요.
+
+예를 들어 `C:/settings/repositories.json`의 `destination`이 `./clones`라면,
+어느 폴더에서 실행해도 `C:/settings/clones` 아래에 저장됩니다.
+설정 파일을 다른 폴더로 옮기면 상대 저장 위치와 자동 로드할 `.env` 위치도 달라집니다.
+
+```powershell
+# Windows: 공백이 있는 경로는 따옴표로 감쌉니다.
+python repo_cloner.py --config C:/settings/repositories.json --destination "D:/Git Copies" --dry-run
+```
+
+```bash
+# macOS / Linux: 사용자 홈 아래에 저장
+python3 repo_cloner.py --config ./repositories.json --destination ~/GitCopies --dry-run
+```
+
+저장 루트나 `source.name`을 바꾸면 **기존 폴더를 이동하지 않고 새 경로를 대상으로**
+실행합니다. 같은 경로를 다시 사용하면 아래의 안전한 갱신 정책을 적용합니다.
+
+## 개별 저장소 URL로 시작하기
+
+개인 계정 저장소나 일부 저장소만 복제하려면 다음 내용을 별도 설정 파일로 저장하세요.
+`provider: "git"`은 목록 조회 API나 API 토큰 없이 지정된 URL을 사용합니다.
+실제 복제·갱신에는 여전히 Git과 해당 URL의 접근 권한이 필요합니다.
+
+```json
+{
+  "destination": "./clones",
+  "sources": [
+    {
+      "name": "personal",
+      "provider": "git",
+      "repositories": [
+        {
+          "name": "repo-cloner",
+          "url": "https://github.com/park-gwimong/repo-cloner.git"
+        }
+      ]
+    }
+  ]
+}
+```
+
+```bash
+# 위 JSON을 personal.json에 저장한 경우
+python repo_cloner.py --config personal.json --dry-run
+python repo_cloner.py --config personal.json
+```
+
+- `repositories`는 비어 있지 않은 목록이며 각 항목의 `name`, `url`은 필수입니다.
+- `name`은 로컬 폴더 이름입니다. 원격 이름과 다르게 지정할 수 있으며 URL에서 추측하지 않습니다.
+- 같은 source 안에서 대소문자만 다른 이름도 중복으로 거절합니다.
+  `../repo`, `a/b` 같은 경로를 `name`으로 지정할 수 없습니다.
+- 지원 URL은 `https://host/owner/repo.git`, `ssh://git@host/owner/repo.git`,
+  `git@host:owner/repo.git` 형태입니다. 로컬 경로·`file://`·실행형 remote helper는 거절합니다.
+- 이 모드에서는 전역 `protocol`로 URL을 바꾸지 않습니다. HTTPS/SSH URL을 그대로 사용합니다.
+  비밀번호나 HTTPS 사용자 정보·토큰을 URL에 넣지 말고 Git 인증 설정을 사용하세요.
+- source 목록 안에서 다른 provider와 함께 사용할 수 있습니다.
+
+## 조직·프로젝트에서 필요한 저장소만 선택하기
+
+모든 source에서 `include`와 `exclude`로 **저장소 이름**을 필터링할 수 있습니다.
+API provider는 조회된 이름/slug, `git` provider는 직접 지정한 `name`을 비교합니다.
+
+```json
+{
+  "name": "team",
+  "provider": "github",
+  "organization": "YOUR_ORGANIZATION",
+  "tokenEnv": "GITHUB_TOKEN",
+  "include": ["api-*", "web-?"],
+  "exclude": ["*-old", "*-archive"]
+}
+```
+
+- 패턴은 `*`, `?`, `[abc]`를 지원하는 glob이며 정규식이 아닙니다.
+  Windows에서도 대소문자를 구분합니다.
+- `include`가 생략되거나 `[]`이면 전체가 후보입니다. 값이 있으면 하나 이상 일치해야 합니다.
+- `exclude`는 **항상 우선**합니다. 두 규칙에 모두 맞으면 제외합니다.
+- 위 예에서 `api-core`, `web-a`는 선택되고 `api-old`, `notes`, `API-extra`는 제외됩니다.
+- 문자열 하나가 아니라 문자열 목록을 사용하세요. `"include": "api-*"`는 오류입니다.
+- 제외한 저장소는 clone/update하지 않고 `skipped`로 집계합니다.
+  모두 제외되어도 정상 종료(0)하며 저장 폴더를 만들지 않습니다.
+- API provider의 필터는 **목록 조회 후** 적용합니다. API 접근 권한이나 페이지 조회를 생략하지 않습니다.
+
+## 실행 전 원본과 최종 경로 확인하기
+
+`--dry-run`은 저장 루트와 원격 URL → 로컬 경로를 표시합니다.
+
+```text
+Destination: D:\GitCopies
+[personal] Found 1 repositories
+PLAN  CLONE https://github.com/park-gwimong/repo-cloner.git -> D:\GitCopies\personal\repo-cloner
+```
+
+`CLONE`은 없는 경로, `UPDATE?`는 이미 있는 일반 디렉터리의 갱신 후보입니다.
+`UPDATE?`는 원격 일치·로컬 수정 여부 등 **갱신 자격을 검사했다는 뜻이 아닙니다**.
+파일·링크 같은 비대상이나 이름 필터 제외 항목은 `SKIP`으로 표시됩니다.
+Git 실행과 폴더 생성은 없으며 API provider만 목록 조회를 위해 네트워크를 사용합니다.
+경로와 대상을 확인한 뒤 같은 명령에서 `--dry-run`을 빼면 실제 실행합니다.
+
 ## 지원 서비스
 
 | provider | 조회 단위 | 필수 설정 | API 인증 |
 | --- | --- | --- | --- |
+| `git` | 직접 지정한 URL 목록 | `repositories`: `name`·`url` 목록 | API 인증 없음; Git 접근 권한 필요 |
 | `github` | GitHub Organization | `organization` | `tokenEnv`: PAT 등 |
 | `bitbucket-cloud` | workspace 안의 프로젝트 | `workspace`, `project` | `usernameEnv`: 이메일, `tokenEnv`: API 토큰 |
 | `bitbucket-server` | Server / Data Center 프로젝트 | `baseUrl`, `project` | `tokenEnv`: 개인 액세스 토큰 |
 
-여러 프로젝트는 `sources`에 추가합니다. source마다 고유한 `name`을 지정하세요. 예제 파일에 세 서비스의 설정이 있습니다.
+여러 프로젝트는 `sources`에 추가합니다. source마다 고유한 `name`을 지정하세요.
+예제 파일에는 세 API 서비스와 직접 URL 지정 예제가 있습니다. 사용할 source만 남기세요.
 
 인증 환경변수는 `<서비스명>_TOKEN`, `<서비스명>_EMAIL` 형식으로 통일합니다. 토큰 종류는 서비스별로 다릅니다.
 
@@ -100,13 +227,13 @@ repo-cloner --config repositories.json
 - `bitbucket-server.baseUrl`: 예: `https://bitbucket.example.com` 또는 context path를 포함한 주소.
 - 공개 저장소를 익명 조회하려면 `tokenEnv`를 생략합니다. Bearer 방식의 Bitbucket Cloud access token 사용 시 `usernameEnv`를 생략합니다.
 
-GitHub에서는 Organization 전체를 조회합니다. GitHub Projects 보드 및 개인 계정 단위 조회는 지원하지 않습니다. 토큰 권한으로 조회 가능한 저장소만 포함되며, 모든 페이지를 순회합니다. 조직의 토큰 승인이나 SSO 설정에 따라 접근 범위가 제한될 수 있습니다.
+`github` provider는 Organization 전체를 조회한 뒤 이름 필터를 적용합니다. GitHub Projects 보드 및 개인 계정 단위 자동 조회는 지원하지 않습니다. 개인 저장소는 `git` provider로 URL을 지정할 수 있습니다. 토큰 권한으로 조회 가능한 저장소만 포함되며, 모든 페이지를 순회합니다. 조직의 토큰 승인이나 SSO 설정에 따라 접근 범위가 제한될 수 있습니다.
 
 **목록 조회 인증과 Git clone 인증은 별개입니다.** SSH는 제공자에 등록한 SSH 키, HTTPS는 Git Credential Manager 등 로컬 Git 인증 설정을 사용합니다. 토큰을 Git URL에 삽입하지 않습니다.
 
 ## 재실행과 안전한 갱신
 
-결과는 `clones/<source 이름>/<저장소 이름>`에 저장됩니다. 없는 경로는 clone하고,
+결과는 `<저장 루트>/<source 이름>/<저장소 이름>`에 저장됩니다. 없는 경로는 clone하고,
 이미 있는 **일반 디렉터리**는 안전 조건을 모두 만족할 때만 현재 브랜치의 명시적
 upstream을 갱신합니다. 별도 `--update` 옵션은 없습니다. 실행 중 같은 저장소나
 출력 위치를 다른 프로세스에서 변경하지 마세요. 이 도구는 경쟁 상태를 원자적으로

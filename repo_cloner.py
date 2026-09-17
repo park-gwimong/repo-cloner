@@ -1,10 +1,11 @@
-"""Bulk clone and safely fast-forward GitHub and Bitbucket repositories."""
+"""Bulk clone and safely fast-forward Git repositories."""
 
 from __future__ import annotations
 
 import argparse
 import base64
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 import json
 import os
 from pathlib import Path
@@ -754,7 +755,25 @@ def clone_link(item: dict, protocol: str, server: bool = False) -> Repository:
 
 def repositories(source: dict, protocol: str) -> Iterator[Repository]:
     provider = required(source, "provider")
-    if provider == "github":
+    if provider == "git":
+        entries = source.get("repositories")
+        if not isinstance(entries, list) or not entries:
+            raise ClonerError("repositories must be a nonempty list for provider git")
+        selected = []
+        names = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise ClonerError("Each repository must contain name and url")
+            name = folder_name(required(entry, "name"))
+            url = required(entry, "url")
+            if _remote_identity(url) is None:
+                raise ClonerError(f"Unsupported clone URL for repository {name!r}")
+            if name.casefold() in names:
+                raise ClonerError(f"Duplicate repository name: {name}")
+            names.add(name.casefold())
+            selected.append(Repository(name, url))
+        yield from selected
+    elif provider == "github":
         api = Api(source.get("apiUrl", "https://api.github.com"), source)
         org = quote(required(source, "organization"), safe="")
         page = 1
@@ -816,14 +835,15 @@ def clone(repo: Repository, parent: Path, dry_run: bool) -> str:
             print(f"SKIP  {target} (existing path is not a regular directory)")
             return "skipped"
         if dry_run:
-            print(f"PLAN  {target}")
+            url = repo.url if _remote_identity(repo.url) is not None else "(unsupported URL)"
+            print(f"PLAN  UPDATE? {url} -> {target} (eligibility not checked)")
             return "planned"
         return _update_existing(repo, target)
     # Never allow local paths or executable Git remote helpers from API responses.
     if _remote_identity(repo.url) is None:
         raise ClonerError("Unsupported clone URL")
     if dry_run:
-        print(f"PLAN  {target}")
+        print(f"PLAN  CLONE {repo.url} -> {target}")
         return "planned"
     parent.mkdir(parents=True, exist_ok=True)
     temporary = parent / f".clone-{uuid4().hex}"
@@ -847,7 +867,16 @@ def clone(repo: Repository, parent: Path, dry_run: bool) -> str:
     return "cloned"
 
 
-def run(config_path: Path, dry_run: bool = False) -> int:
+def _patterns(source: dict, key: str) -> list[str]:
+    value = source.get(key, [])
+    if not isinstance(value, list) or any(
+        not isinstance(pattern, str) or not pattern.strip() for pattern in value
+    ):
+        raise ClonerError(f"{key} must be a list of nonempty name patterns")
+    return value
+
+
+def run(config_path: Path, dry_run: bool = False, destination: Path | None = None) -> int:
     config = json.loads(config_path.read_text(encoding="utf-8-sig"))
     load_env(config_path.resolve().parent / ".env")
     protocol = config.get("protocol", "ssh")
@@ -858,16 +887,28 @@ def run(config_path: Path, dry_run: bool = False) -> int:
         raise ClonerError("sources must be a nonempty list")
     names = set()
     for source in sources:
+        if not isinstance(source, dict):
+            raise ClonerError("Each source must be an object")
         name = folder_name(required(source, "name"))
         if name.casefold() in names:
             raise ClonerError(f"Duplicate source name: {name}")
         names.add(name.casefold())
-    root = Path(config.get("destination", "./clones")).expanduser()
-    if not root.is_absolute():
-        root = config_path.resolve().parent / root
+        _patterns(source, "include")
+        _patterns(source, "exclude")
+    if destination is not None:
+        root = Path(os.path.abspath(destination.expanduser()))
+    else:
+        configured = config.get("destination", "./clones")
+        if not isinstance(configured, str) or not configured.strip():
+            raise ClonerError("destination must be a nonempty path string")
+        root = Path(configured).expanduser()
+        if not root.is_absolute():
+            root = config_path.resolve().parent / root
+        root = Path(os.path.abspath(root))
     if not dry_run and not shutil.which("git"):
         raise ClonerError("Git was not found in PATH. Install Git first.")
     counts = dict.fromkeys(("cloned", "updated", "unchanged", "skipped", "planned", "failed"), 0)
+    print(f"Destination: {root}", flush=True)
     for source in sources:
         print(f"[{source['name']}] Fetching repositories...", flush=True)
         try:
@@ -877,8 +918,17 @@ def run(config_path: Path, dry_run: bool = False) -> int:
             counts["failed"] += 1
             continue
         print(f"[{source['name']}] Found {len(repos)} repositories")
+        include = _patterns(source, "include")
+        exclude = _patterns(source, "exclude")
         for repo in repos:
             try:
+                name = folder_name(repo.name)
+                if (
+                    include and not any(fnmatchcase(name, pattern) for pattern in include)
+                ) or any(fnmatchcase(name, pattern) for pattern in exclude):
+                    print(f"SKIP  [{source['name']}/{name}] (name filter)")
+                    counts["skipped"] += 1
+                    continue
                 counts[clone(repo, root / source["name"], dry_run)] += 1
             except (ClonerError, OSError) as exc:
                 print(f"[{source['name']}/{repo.name}] {exc}", file=sys.stderr)
@@ -889,7 +939,14 @@ def run(config_path: Path, dry_run: bool = False) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=Path("repositories.json"))
+    parser.add_argument(
+        "--config", type=Path, default=Path("repositories.json"),
+        help="Configuration file (default: repositories.json); JSON paths are relative to this file",
+    )
+    parser.add_argument(
+        "--destination", type=Path,
+        help="Override destination; relative paths use the current working directory",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -897,7 +954,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        return run(args.config, args.dry_run)
+        return run(args.config, args.dry_run, args.destination)
     except (ClonerError, OSError, ValueError, TypeError, KeyError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

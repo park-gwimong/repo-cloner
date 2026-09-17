@@ -6,7 +6,9 @@
       "name": "github-my-team",
       "provider": "github",
       "organization": "YOUR_ORGANIZATION",
-      "tokenEnv": "GITHUB_TOKEN"
+      "tokenEnv": "GITHUB_TOKEN",
+      "include": [],
+      "exclude": ["*-archive"]
     },
     {
       "name": "bitbucket-project-a",
@@ -22,6 +24,16 @@
       "baseUrl": "https://bitbucket.example.com",
       "project": "PROJECT_KEY",
       "tokenEnv": "BITBUCKET_SERVER_TOKEN"
+    },
+    {
+      "name": "personal",
+      "provider": "git",
+      "repositories": [
+        {
+          "name": "repo-cloner",
+          "url": "https://github.com/park-gwimong/repo-cloner.git"
+        }
+      ]
     }
   ]
 }
