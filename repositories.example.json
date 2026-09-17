@@ -1,0 +1,27 @@
+{
+  "destination": "./clones",
+  "protocol": "ssh",
+  "sources": [
+    {
+      "name": "github-my-team",
+      "provider": "github",
+      "organization": "YOUR_ORGANIZATION",
+      "tokenEnv": "GITHUB_TOKEN"
+    },
+    {
+      "name": "bitbucket-project-a",
+      "provider": "bitbucket-cloud",
+      "workspace": "YOUR_WORKSPACE",
+      "project": "PROJECT_KEY",
+      "usernameEnv": "BITBUCKET_CLOUD_EMAIL",
+      "tokenEnv": "BITBUCKET_CLOUD_TOKEN"
+    },
+    {
+      "name": "company-project-b",
+      "provider": "bitbucket-server",
+      "baseUrl": "https://bitbucket.example.com",
+      "project": "PROJECT_KEY",
+      "tokenEnv": "BITBUCKET_SERVER_TOKEN"
+    }
+  ]
+}

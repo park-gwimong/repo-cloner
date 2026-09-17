@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-repo-cloner"
+version = "0.1.0"
+description = "Clone repositories from GitHub organizations and Bitbucket projects"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["git", "github", "bitbucket", "clone", "automation"]
+dependencies = []
+
+[project.scripts]
+repo-cloner = "repo_cloner:main"
+
+[tool.setuptools]
+py-modules = ["repo_cloner"]

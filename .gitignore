@@ -1,0 +1,13 @@
+/repositories.json
+/clones/
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+.env
+/.gjc/
+/.idea/
