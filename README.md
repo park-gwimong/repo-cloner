@@ -1,12 +1,77 @@
 # Project Repo Cloner
 
+[![Tests](https://github.com/park-gwimong/repo-cloner/actions/workflows/tests.yml/badge.svg)](https://github.com/park-gwimong/repo-cloner/actions/workflows/tests.yml)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 GitHub 조직, Bitbucket 프로젝트, 직접 지정한 Git URL의 저장소를 일괄 clone하고 안전하게 갱신하는 터미널 도구입니다.
 **기본 실행은 TUI**입니다. 저장 경로와 조회할 서비스를 화면에서 설정한 뒤 프로젝트·저장소를 선택합니다.
 Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 없습니다.
 
+[시작하기](#빠른-시작) · [Batch 가이드](docs/BATCH.md) · [설정 레퍼런스](docs/CONFIGURATION.md) · [문제 해결](docs/TROUBLESHOOTING.md) · [기여](CONTRIBUTING.md)
+
+## 목차
+
+- [주요 기능](#주요-기능)
+- [요구 사항과 설치](#요구-사항과-설치)
+- [빠른 시작](#빠른-시작)
+- [실행 모드 비교](#실행-모드-비교)
+- [TUI 실행 흐름](#tui-실행-흐름)
+- [Batch 모드](#batch-모드)
+- [인증](#인증)
+- [실행 옵션](#실행-옵션)
+- [안전한 갱신과 결과](#안전한-갱신과-결과)
+- [문서 안내](#문서-안내)
+- [프로젝트 구조](#프로젝트-구조)
+- [개발과 기여](#개발과-기여)
+- [라이선스](#라이선스)
+
+## 주요 기능
+
+- GitHub Organization, Bitbucket Cloud, Bitbucket Server / Data Center 및 직접 Git URL 지원
+- 키보드 TUI의 workspace → 프로젝트 → 저장소 선택과 저장 경로 편집
+- 여러 source·프로젝트를 처리하는 batch 및 include/exclude 이름 필터
+- 실행 대상과 경로 미리 보기, 저장소 단위 진행률 및 결과 집계
+- 기존 작업 트리를 검사하고 현재 upstream만 fast-forward하는 갱신 정책
+- Python 표준 라이브러리 기반 구현, Windows/macOS/Linux CI 구성
+
+복제 단위는 Git 저장소의 일반 작업 트리입니다. 전체 refs를 보관하는 mirror 백업,
+로컬 미커밋 변경 백업, 서브모듈 자동 초기화, 여러 저장소의 병렬 clone은 지원하지 않습니다.
+
+## 요구 사항과 설치
+
+| 항목 | 요구 사항 |
+| --- | --- |
+| Python | 3.10 이상 |
+| Git | 실제 clone/update 시 PATH에 설치 필요 |
+| TUI 터미널 | ANSI 지원, 최소 61열 × 12행, 직접 연결된 표준 입력·출력 |
+| 네트워크 | API 조회용 HTTPS와 저장소 URL에 맞는 SSH/HTTPS 연결 |
+
+```bash
+git clone https://github.com/park-gwimong/repo-cloner.git
+cd repo-cloner
+python --version
+git --version
+python repo_cloner.py --help
+```
+
+소스에서 바로 실행할 수 있습니다. 명령으로 설치하려면 다음을 사용하세요.
+아래 설치는 현재 체크아웃을 대상으로 하며 PyPI 배포 여부를 전제로 하지 않습니다.
+
+```bash
+python -m venv .venv
+# 가상환경 활성화 후
+python -m pip install .
+repo-cloner --help
+```
+
+PowerShell 활성화: `.venv\Scripts\Activate.ps1`, macOS/Linux 활성화: `source .venv/bin/activate`.
+macOS/Linux 환경에 따라 `python` 대신 `python3`를 사용하세요.
+가상환경 활성화가 제한된 환경에서는 해당 환경의 Python 실행 파일을 직접 지정해도 됩니다.
+
 ## 빠른 시작
 
-`repositories.example.json`을 `repositories.json`으로 복사하고 인증 정보를 입력하세요.
+`examples/credentials.json`을 `repositories.json`으로 복사하고 인증 정보를 입력하세요.
 
 ```json
 {
@@ -19,6 +84,19 @@ Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 �
 프로젝트, 저장소 목록은 TUI에서 설정하며 파일에 기록하지 않습니다. 실행할 때마다 다시 설정합니다.
 인증 정보는 화면에 표시하지 않습니다. 이 파일은 Git 제외 대상입니다.
 
+```powershell
+# Windows PowerShell
+Copy-Item examples/credentials.json repositories.json
+```
+
+```bash
+# macOS / Linux
+cp examples/credentials.json repositories.json
+```
+
+복사한 파일의 YOUR_TOKEN과 이메일을 수정하세요. 예제 원본에는 실제 인증 값을 넣지 마세요.
+직접 Git URL만 사용할 경우 repositories.json을 `{}`로 작성해도 됩니다.
+
 ```bash
 python repo_cloner.py
 # Git 실행 없이 설정·조회·미리 보기
@@ -27,6 +105,17 @@ python repo_cloner.py --dry-run
 python -m pip install .
 repo-cloner
 ```
+
+## 실행 모드 비교
+
+| 모드 | 명령 | 설정 파일 | 선택과 확인 | 권장 상황 |
+| --- | --- | --- | --- | --- |
+| TUI (기본) | `python repo_cloner.py` | 인증 전용 repositories.json | 화면 설정·다중 선택, 마지막 Enter로 실행 | 목록을 탐색하며 수동 실행 |
+| Batch | `python repo_cloner.py --batch --config batch.json` | 전체 source 설정 | 앱 선택·확인 없음 | 같은 대상 반복 실행, 예약 작업, CI |
+| 번호 입력 | `python repo_cloner.py -i --config batch.json` | 전체 source 설정 | 번호 선택 후 y로 실행, Enter는 취소 | 단순 콘솔에서 선택 실행 |
+
+세 모드 모두 `--dry-run`을 지원합니다. `--batch`, `-i`, `--tui`는 동시에 지정할 수 없습니다.
+API 인증 전용 파일과 전체 설정 파일은 자동 병합되지 않습니다.
 
 ## TUI 실행 흐름
 
@@ -64,6 +153,61 @@ GitHub는 `<저장 경로>/<조직명>/<저장소 이름>`, 직접 Git URL은 `<
 메뉴를 닫으면 이전 화면과 커서를 복구합니다.
 Windows ANSI 콘솔(예: Windows Terminal), macOS/Linux 터미널에서 최소 61열 × 12행으로 사용하세요.
 크기를 바꾸면 다음 키 입력 때 다시 그립니다. 파일·파이프 입출력 환경에서는 `--batch`를 사용하세요.
+
+## Batch 모드
+
+batch는 JSON에 지정한 저장소를 **확인 입력 없이 순서대로 clone/update**합니다.
+TUI에서 선택했던 결과를 자동 재사용하는 기능이 아니라 별도의 재현 가능한 작업 설정을 실행하는 방식입니다.
+
+API가 필요 없는 예제로 시작할 수 있습니다. 아래 내용을 프로젝트 루트의 `batch.json`에 저장하세요.
+
+```json
+{
+  "destination": "./clones",
+  "sources": [
+    {
+      "name": "personal",
+      "provider": "git",
+      "repositories": [
+        {"name": "repo-cloner", "url": "https://github.com/park-gwimong/repo-cloner.git"}
+      ]
+    }
+  ]
+}
+```
+
+```bash
+python repo_cloner.py --batch --config batch.json --dry-run
+python repo_cloner.py --batch --config batch.json
+```
+
+첫 명령은 미리 보기이고 두 번째는 실제 실행입니다. 위 예제의 결과는 `clones/personal/repo-cloner`입니다.
+API provider를 사용하면 해당 source에 workspace·조직·프로젝트 키와 인증 정보를 추가합니다.
+`--batch`만 지정해도 파일명이 batch.json으로 바뀌지 않으므로 `--config`를 명시하세요.
+
+### 저장 경로 규칙
+
+| 모드와 대상 | 저장 경로 |
+| --- | --- |
+| TUI Bitbucket | `<destination>/<프로젝트 표시 이름>/<저장소>` |
+| TUI GitHub | `<destination>/<조직명>/<저장소>` |
+| TUI 직접 URL | `<destination>/<입력한 프로젝트명>/<저장소>` |
+| Batch 단일 project / GitHub / 직접 URL | `<destination>/<source.name>/<저장소>` |
+| Batch projects 목록 | `<destination>/<source.name>/<프로젝트 키>/<저장소>` |
+
+batch도 프로젝트명 바로 아래에 저장하려면 프로젝트마다 source를 만들고
+`name`을 프로젝트명, `project`를 API 프로젝트 키로 지정하세요.
+JSON destination의 상대 경로는 **설정 파일 위치**, CLI --destination의 상대 경로는 **현재 작업 디렉터리** 기준입니다.
+
+### 처리와 자동화
+
+설정 검사 → 저장소 조회 → 필터 → 전체 대상 표시 → 순차 clone/update → 결과 집계 순서입니다.
+잡힌 조회·저장소 처리 오류는 실패로 집계하고 나머지를 계속하며, 시작 단계의 설정 오류는 실행을 중단합니다.
+같은 설정으로 재실행하면 기존 경로를 검사해 안전한 경우만 갱신합니다.
+
+batch는 앱의 입력을 생략하지만 Git/SSH 인증 프롬프트까지 없애지는 않습니다.
+예약 실행 계정에서 인증을 미리 설정하고 같은 저장 경로의 작업을 중복 실행하지 마세요.
+상세한 Bitbucket 예제, 필터, 로그 저장, 예약 실행과 종료 코드 설명은 [Batch 가이드](docs/BATCH.md)를 보세요.
 
 ## 인증
 
@@ -103,7 +247,7 @@ python repo_cloner.py --batch --config batch.json
 python repo_cloner.py -i --config batch.json
 ```
 
-전체 설정 예제는 [repositories.batch.example.json](repositories.batch.example.json),
+전체 설정 예제는 [examples/batch.all-providers.json](examples/batch.all-providers.json),
 프로젝트별 설정·include/exclude·API 문제 해결 및 갱신 조건은 [일괄 실행 참고 문서](docs/BATCH.md)를 보세요.
 별도 파일에 실제 토큰을 넣었다면 해당 파일도 커밋하지 마세요.
 
@@ -117,6 +261,7 @@ python repo_cloner.py -i --config batch.json
 진행률은 처리한 저장소 수를 기준으로 하며 마지막에 `cloned`, `updated`, `unchanged`,
 `skipped`, `planned`, `failed`를 집계합니다. 실패한 source·저장소 뒤에도 나머지를 처리합니다.
 실패가 있으면 종료 코드 1, 정상 종료는 0, 키보드 취소는 130입니다.
+잘못된 CLI 옵션이나 상호 배타적인 옵션 조합은 종료 코드 2입니다.
 실행 전 확인에서 취소하면 변경 없이 종료하며 앞선 조회 실패가 없다면 0입니다.
 실행 도중 중단했을 때는 이미 완료한 작업을 되돌리지 않습니다.
 
@@ -124,7 +269,46 @@ python repo_cloner.py -i --config batch.json
 출력된 경로를 확인한 뒤 다시 실행하세요. 동시에 같은 저장 경로를 변경하지 마세요.
 dry-run은 API 조회는 수행하지만 Git 실행·폴더 생성·기존 저장소 갱신 자격 검사는 하지 않습니다.
 
-## 개발
+정확한 원격 URL 비교, upstream 검사, FETCH_HEAD/tracking ref 변경 범위는 [안전 정책](docs/SAFETY.md)에 설명되어 있습니다.
+
+## 문서 안내
+
+| 문서 | 내용 |
+| --- | --- |
+| [Batch 가이드](docs/BATCH.md) | 전체 설정 실행, 경로, 필터, 로그·예약 실행, 종료 코드 |
+| [설정 레퍼런스](docs/CONFIGURATION.md) | TUI/batch 형식, provider별 필드, 인증·경로 규칙 |
+| [안전 정책](docs/SAFETY.md) | clone/update 보호 조건과 재실행의 한계 |
+| [문제 해결](docs/TROUBLESHOOTING.md) | API 인증·네트워크·Git·TUI 오류 |
+| [구조 설명](docs/ARCHITECTURE.md) | 두 Python 모듈의 역할과 실행 흐름 |
+| [예제 목록](examples/README.md) | 서비스별 복사해서 사용할 JSON |
+| [변경 기록](CHANGELOG.md) | 주요 변경과 설정·동작 호환성 |
+
+## 프로젝트 구조
+
+```text
+repo-cloner/
+├── repo_cloner.py               # 진입점, API, 계획, clone/update
+├── repo_cloner_tui.py           # 키보드 입력, 설정 화면, 선택·확인
+├── pyproject.toml              # 패키징 및 repo-cloner 명령
+├── examples/                   # 인증 및 provider별 batch 예제
+├── docs/                       # 사용·설정·안전·구조 문서
+├── tests/                      # 표준 unittest 테스트
+├── .github/
+│   ├── workflows/tests.yml     # OS·Python 조합 CI
+│   ├── ISSUE_TEMPLATE/         # 버그 및 기능 요청 양식
+│   └── pull_request_template.md
+├── CONTRIBUTING.md
+├── CHANGELOG.md
+├── README.md
+└── LICENSE
+```
+
+핵심 파일 중심의 구조이며 로컬 자격 증명·도구 파일은 생략했습니다.
+두 Python 모듈은 소스 직접 실행과 설치 명령을 모두 지원하도록 루트에 둡니다.
+`repo_cloner.py`가 TUI 모듈을 필요할 때 불러오므로 TUI 파일을 따로 실행할 필요가 없습니다.
+기존 루트의 예제 JSON 두 개는 `examples/credentials.json`, `examples/batch.all-providers.json`으로 이동했습니다.
+
+## 개발과 기여
 
 ```bash
 python -m unittest discover -s tests -v
@@ -132,4 +316,15 @@ python -m unittest discover -s tests -v
 
 테스트는 실제 API 토큰 없이 API 조회, 인증, TUI 설정·선택·취소, dry-run,
 임시 Git 원격을 이용한 안전한 갱신을 검증합니다. Git이 PATH에 있어야 합니다.
-라이선스는 [MIT](LICENSE)입니다.
+GitHub Actions는 Windows/Linux/macOS와 Python 3.10/3.13 조합으로 테스트·설치·명령 도움말을 확인합니다.
+개발 환경과 PR 검증 방법은 [CONTRIBUTING.md](CONTRIBUTING.md)를 보세요.
+버그 보고와 기능 제안은 [Issues](https://github.com/park-gwimong/repo-cloner/issues)에서 양식을 사용하세요.
+
+문서·폴더 구성은 [Ruff](https://github.com/astral-sh/ruff)의 문서/기여 분리,
+[yt-dlp](https://github.com/yt-dlp/yt-dlp)의 목차·명령 옵션·예제 중심 설명,
+[Textual](https://github.com/Textualize/textual)의 사용자·개발 문서 구분을 참고했습니다.
+이 프로젝트의 규모와 표준 라이브러리 기반 실행 방식에 맞게 적용했습니다.
+
+## 라이선스
+
+[MIT](LICENSE). Atlassian 또는 GitHub의 공식 도구가 아닙니다.

@@ -1,0 +1,12 @@
+{
+  "destination": "./clones",
+  "sources": [
+    {
+      "name": "personal",
+      "provider": "git",
+      "repositories": [
+        {"name": "repo-cloner", "url": "https://github.com/park-gwimong/repo-cloner.git"}
+      ]
+    }
+  ]
+}

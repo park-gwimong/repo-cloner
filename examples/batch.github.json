@@ -1,0 +1,14 @@
+{
+  "destination": "./clones",
+  "protocol": "ssh",
+  "sources": [
+    {
+      "name": "my-org",
+      "provider": "github",
+      "organization": "YOUR_ORGANIZATION",
+      "token": "YOUR_TOKEN",
+      "include": ["api-*", "web-*"],
+      "exclude": ["*-archive"]
+    }
+  ]
+}

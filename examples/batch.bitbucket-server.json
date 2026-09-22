@@ -1,0 +1,13 @@
+{
+  "destination": "./clones",
+  "protocol": "ssh",
+  "sources": [
+    {
+      "name": "APP",
+      "provider": "bitbucket-server",
+      "baseUrl": "https://bitbucket.example.com",
+      "project": "APP",
+      "token": "YOUR_TOKEN"
+    }
+  ]
+}
