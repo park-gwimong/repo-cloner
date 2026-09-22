@@ -11,10 +11,15 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from typing import Iterator
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -709,15 +714,40 @@ class Api:
         if (parsed.scheme != "https" or parsed.netloc != origin.netloc
                 or parsed.username or parsed.password):
             raise ClonerError("API URL must use HTTPS and the configured API host")
-        try:
-            with self.opener.open(Request(url, headers=self.headers), timeout=60) as response:
-                return json.load(response)
-        except HTTPError as exc:
-            raise ClonerError(
-                f"API HTTP {exc.code}: check credentials, permissions, URL and rate limit"
-            ) from None
-        except (URLError, TimeoutError, ValueError):
-            raise ClonerError("API request failed: check connectivity and JSON response") from None
+        for attempt in range(1, 4):
+            try:
+                with self.opener.open(Request(url, headers=self.headers), timeout=60) as response:
+                    return json.load(response)
+            except HTTPError as exc:
+                code = exc.code
+                exc.close()
+                if code not in {502, 503, 504}:
+                    raise ClonerError(
+                        f"API HTTP {code}: check credentials, permissions, URL and rate limit"
+                    ) from None
+                detail = f"API HTTP {code}: server temporarily unavailable"
+            except (URLError, TimeoutError, ConnectionError, ssl.SSLError, HTTPException) as exc:
+                reason = exc.reason if isinstance(exc, URLError) else exc
+                if isinstance(reason, ssl.SSLError):
+                    raise ClonerError(
+                        "API TLS verification/handshake failed: check Python certificate trust and HTTPS proxy settings"
+                    ) from None
+                if isinstance(reason, TimeoutError):
+                    detail = "API request timed out (60s socket timeout)"
+                elif isinstance(reason, socket.gaierror):
+                    detail = "API DNS lookup failed: check network, VPN and DNS settings"
+                elif isinstance(reason, HTTPException):
+                    detail = "API connection ended before a complete response was received"
+                else:
+                    detail = "API connection failed: check network, VPN, firewall and proxy settings"
+            except ValueError:
+                raise ClonerError(
+                    "API returned invalid JSON: check service availability and proxy/login interception"
+                ) from None
+            if attempt == 3:
+                raise ClonerError(f"{detail}; failed after 3 attempts") from None
+            print(f"{detail}; retrying ({attempt + 1}/3)...", file=sys.stderr, flush=True)
+            time.sleep(attempt)
 
 
 def clone_link(item: dict, protocol: str, server: bool = False) -> Repository:
@@ -824,7 +854,7 @@ def clone(repo: Repository, parent: Path, dry_run: bool) -> str:
     temporary = parent / f".clone-{uuid4().hex}"
     print(f"CLONE {target}", flush=True)
     try:
-        subprocess.run(["git", "clone", "--", repo.url, str(temporary)], check=True)
+        subprocess.run(["git", "clone", "--progress", "--", repo.url, str(temporary)], check=True)
         # Reserve the destination atomically; do not overwrite a concurrent clone.
         target.mkdir()
         try:
@@ -851,8 +881,215 @@ def _patterns(source: dict, key: str) -> list[str]:
     return value
 
 
-def run(config_path: Path, dry_run: bool = False, destination: Path | None = None) -> int:
-    config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+def _project_sources(source: dict) -> list[tuple[dict, tuple[str, ...]]]:
+    """Expand project lists while keeping legacy single-project paths stable."""
+    if "projects" not in source:
+        return [(source, (source["name"],))]
+    if source.get("provider") not in {"bitbucket-cloud", "bitbucket-server"}:
+        raise ClonerError("projects is only supported for Bitbucket sources")
+    if "project" in source:
+        raise ClonerError("Use either project or projects, not both")
+    projects = source["projects"]
+    if not isinstance(projects, list) or not projects:
+        raise ClonerError("projects must be a nonempty list of project keys")
+    seen = set()
+    expanded = []
+    for project in projects:
+        if not isinstance(project, str) or not project.strip():
+            raise ClonerError("projects must contain nonempty project keys")
+        folder_name(project)
+        if project.casefold() in seen:
+            raise ClonerError(f"Duplicate project key: {project}")
+        seen.add(project.casefold())
+        child = {key: value for key, value in source.items() if key != "projects"}
+        child["project"] = project
+        expanded.append((child, (source["name"], project)))
+    return expanded
+
+
+def _select_indices(title: str, labels: list[str]) -> list[int]:
+    print(f"\n{title} ({len(labels)})", flush=True)
+    for index, label in enumerate(labels, 1):
+        clean = "".join(char if char.isprintable() else "?" for char in label)
+        print(f"  {index:>3}. {clean}", flush=True)
+    if not labels:
+        return []
+    while True:
+        try:
+            answer = input("Select numbers (1,3-5), all, none, or q to cancel: ").strip().lower()
+        except EOFError:
+            raise KeyboardInterrupt from None
+        if answer == "q":
+            raise KeyboardInterrupt
+        if answer == "all":
+            return list(range(len(labels)))
+        if answer == "none":
+            return []
+        chosen = set()
+        try:
+            for part in answer.split(","):
+                match = re.fullmatch(r"\s*([0-9]+)(?:\s*-\s*([0-9]+))?\s*", part)
+                if not match:
+                    raise ValueError
+                start = int(match[1])
+                end = int(match[2] or match[1])
+                if not 1 <= start <= end <= len(labels):
+                    raise ValueError
+                chosen.update(range(start - 1, end))
+            return sorted(chosen)
+        except ValueError:
+            print("Invalid selection. Use listed numbers, all, none, or q.", flush=True)
+
+
+def available_workspaces(credentials: dict) -> list[tuple[str, str]]:
+    """List the authenticated user's Cloud workspaces, following every page."""
+    api = Api("https://api.bitbucket.org/2.0", credentials)
+    url = f"{api.base}/user/workspaces?pagelen=100"
+    visited = set()
+    found = {}
+    while url:
+        if not isinstance(url, str):
+            raise ClonerError("Invalid workspace pagination URL")
+        if url in visited:
+            raise ClonerError("API returned a repeated workspace pagination URL")
+        visited.add(url)
+        print(f"Workspace discovery: page {len(visited)} ({len(found)} workspaces found)...", flush=True)
+        try:
+            data = api.get(url)
+        except ClonerError as exc:
+            raise ClonerError(
+                f"Workspace listing failed: {exc}. Check the account's workspace access "
+                "and API token scope read:workspace:bitbucket."
+            ) from None
+        if not isinstance(data, dict) or not isinstance(data.get("values"), list):
+            raise ClonerError("Invalid workspace list response")
+        for item in data["values"]:
+            workspace = item.get("workspace") if isinstance(item, dict) else None
+            if not isinstance(workspace, dict):
+                raise ClonerError("Invalid workspace list entry")
+            slug = required(workspace, "slug")
+            name = workspace.get("name") or slug
+            if not isinstance(name, str):
+                raise ClonerError("Invalid workspace display name")
+            found[slug] = name
+        url = data.get("next")
+    return sorted(found.items(), key=lambda item: (item[1].casefold(), item[0]))
+
+
+def available_projects(source: dict) -> list[tuple[str, str]]:
+    """Discover Cloud projects from accessible repositories using repository read scope."""
+    provider = source["provider"]
+    if provider == "bitbucket-cloud":
+        api = Api("https://api.bitbucket.org/2.0", source)
+        workspace = quote(required(source, "workspace"), safe="")
+        query = urlencode({"pagelen": 100, "fields": "values.project.key,values.project.name,next"})
+        url = f"{api.base}/repositories/{workspace}?{query}"
+    else:
+        api = Api(required(source, "baseUrl"), source)
+        url = f"{api.base}/rest/api/1.0/projects?limit=100&start=0"
+    found = {}
+    visited = set()
+    start = 0
+    while url:
+        if url in visited:
+            raise ClonerError("API returned a repeated pagination URL")
+        visited.add(url)
+        print(f"Project discovery: page {len(visited)} ({len(found)} projects found)...", flush=True)
+        data = api.get(url)
+        for item in data["values"]:
+            project = item.get("project") if provider == "bitbucket-cloud" else item
+            if not project:
+                continue
+            key = folder_name(required(project, "key"))
+            found[key] = str(project.get("name", key))
+        if provider == "bitbucket-cloud":
+            url = data.get("next")
+        elif data["isLastPage"]:
+            break
+        else:
+            next_start = data["nextPageStart"]
+            if not isinstance(next_start, int) or next_start <= start:
+                raise ClonerError("Invalid API pagination offset")
+            start = next_start
+            url = f"{api.base}/rest/api/1.0/projects?limit=100&start={start}"
+    return sorted(found.items())
+
+
+def _interactive_sources(sources: list[dict], selector=None, *, project_folders=False) -> tuple[list, int]:
+    select = selector or _select_indices
+    selected = (select("Sources", [s["name"] for s in sources])
+                if len(sources) > 1 else [0])
+    expanded = []
+    failed = 0
+    for index in selected:
+        source = sources[index]
+        if source.get("provider") not in {"bitbucket-cloud", "bitbucket-server"}:
+            expanded.extend(_project_sources(source))
+            continue
+        print(f"[{source['name']}] Discovering accessible projects...", flush=True)
+        try:
+            projects = available_projects(source)
+        except (ClonerError, KeyError, TypeError, ValueError) as exc:
+            print(f"[{source['name']}] Project listing failed: {exc}", file=sys.stderr, flush=True)
+            failed += 1
+            continue
+        selected_projects = select(
+            f"Projects in {source['name']}", [f"{key} | {name}" for key, name in projects])
+        for project_index in selected_projects:
+            key, project_name = projects[project_index]
+            child = {k: v for k, v in source.items() if k != "projects"}
+            child["project"] = key
+            if project_folders:
+                parts = (folder_name(project_name),)
+            else:
+                parts = ((source["name"],) if source.get("project") == key
+                         else (source["name"], key))
+            expanded.append((child, parts))
+    if project_folders:
+        seen = set()
+        for _, parts in expanded:
+            path_key = tuple(part.casefold() for part in parts)
+            if path_key in seen:
+                raise ClonerError(f"Duplicate project folder: {'/'.join(parts)}; select projects with distinct names")
+            seen.add(path_key)
+    return expanded, failed
+
+
+def _run_with_progress(repo: Repository, parent: Path, dry_run: bool,
+                       completed: int, total: int, label: str) -> str:
+    started = time.monotonic()
+    stopped = threading.Event()
+
+    def report():
+        elapsed = time.monotonic() - started
+        print(f"Progress: {completed}/{total} ({completed * 100 // total}%) "
+              f"RUNNING {label} elapsed={elapsed:.0f}s", flush=True)
+
+    def heartbeat():
+        while not stopped.wait(1):
+            report()
+
+    report()
+    worker = None
+    if not dry_run:
+        worker = threading.Thread(target=heartbeat, daemon=True)
+        worker.start()
+    try:
+        return clone(repo, parent, dry_run)
+    finally:
+        stopped.set()
+        if worker is not None:
+            worker.join()
+
+
+def run(config_path: Path, dry_run: bool = False, destination: Path | None = None,
+        *, interactive: bool = False, ui=None, config: dict | None = None) -> int:
+    interactive = interactive or ui is not None
+    select = ui.select if ui is not None else _select_indices
+    if config is None:
+        config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    if not isinstance(config, dict):
+        raise ClonerError("Configuration must be a JSON object")
     protocol = config.get("protocol", "ssh")
     if protocol not in {"ssh", "https"}:
         raise ClonerError("protocol must be ssh or https")
@@ -860,6 +1097,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
     if not isinstance(sources, list) or not sources:
         raise ClonerError("sources must be a nonempty list")
     names = set()
+    expanded = []
     for source in sources:
         if not isinstance(source, dict):
             raise ClonerError("Each source must be an object")
@@ -869,6 +1107,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         names.add(name.casefold())
         _patterns(source, "include")
         _patterns(source, "exclude")
+        expanded.extend(_project_sources(source))
     if destination is not None:
         root = Path(os.path.abspath(destination.expanduser()))
     else:
@@ -883,15 +1122,21 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         raise ClonerError("Git was not found in PATH. Install Git first.")
     counts = dict.fromkeys(("cloned", "updated", "unchanged", "skipped", "planned", "failed"), 0)
     print(f"Destination: {root}", flush=True)
-    for source in sources:
-        print(f"[{source['name']}] Fetching repositories...", flush=True)
+    if interactive:
+        expanded, counts["failed"] = _interactive_sources(sources, select, project_folders=ui is not None)
+    tasks = []
+    targets = set()
+    for index, (source, parts) in enumerate(expanded, 1):
+        label = "/".join(parts)
+        parent = root.joinpath(*parts)
+        print(f"[{index}/{len(expanded)} {label}] Fetching repositories...", flush=True)
         try:
             repos = list(repositories(source, protocol))
         except (ClonerError, KeyError, TypeError, ValueError) as exc:
-            print(f"[{source['name']}] Listing failed: {exc}", file=sys.stderr)
+            print(f"[{label}] Listing failed: {exc}", file=sys.stderr, flush=True)
             counts["failed"] += 1
             continue
-        print(f"[{source['name']}] Found {len(repos)} repositories")
+        print(f"[{label}] Found {len(repos)} repositories", flush=True)
         include = _patterns(source, "include")
         exclude = _patterns(source, "exclude")
         for repo in repos:
@@ -900,14 +1145,58 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
                 if (
                     include and not any(fnmatchcase(name, pattern) for pattern in include)
                 ) or any(fnmatchcase(name, pattern) for pattern in exclude):
-                    print(f"SKIP  [{source['name']}/{name}] (name filter)")
+                    print(f"SKIP  [{label}/{name}] (name filter)", flush=True)
                     counts["skipped"] += 1
                     continue
-                counts[clone(repo, root / source["name"], dry_run)] += 1
+                target_key = str(parent / name).casefold()
+                if target_key in targets:
+                    raise ClonerError("Duplicate repository destination")
+                targets.add(target_key)
+                tasks.append((repo, parent, label))
             except (ClonerError, OSError) as exc:
-                print(f"[{source['name']}/{repo.name}] {exc}", file=sys.stderr)
+                print(f"[{label}/{repo.name}] {exc}", file=sys.stderr, flush=True)
                 counts["failed"] += 1
-    print("Done: " + " ".join(f"{key}={value}" for key, value in counts.items()))
+    if interactive:
+        selected = select("Repositories", [
+            f"{label}/{repo.name} -> {parent / repo.name}" for repo, parent, label in tasks])
+        counts["skipped"] += len(tasks) - len(selected)
+        tasks = [tasks[index] for index in selected]
+    print(f"Targets: {len(tasks)} repositories", flush=True)
+    preview = []
+    print("# | Source / Repository | Action | Destination", flush=True)
+    for index, (repo, parent, label) in enumerate(tasks, 1):
+        target = parent / repo.name
+        action = "UPDATE?" if target.is_dir() else "CLONE"
+        if target.is_symlink() or _is_reparse_point(target) or (target.exists() and not target.is_dir()):
+            action = "SKIP"
+        print(f"{index} | {label}/{repo.name} | {action} | {target}", flush=True)
+        preview.append(f"{action} | {label}/{repo.name} -> {target}")
+    print("UPDATE? = eligibility will be checked during execution", flush=True)
+    if ui is not None and tasks:
+        confirmed = ui.confirm(preview, dry_run=dry_run)
+        if not dry_run and not confirmed:
+            print("Cancelled. No repositories were changed.", flush=True)
+            return 1 if counts["failed"] else 0
+    elif interactive and tasks and not dry_run:
+        try:
+            answer = input(f"Execute {len(tasks)} selected repositories? [y/N]: ").strip().lower()
+        except EOFError:
+            raise KeyboardInterrupt from None
+        if answer not in {"y", "yes"}:
+            print("Cancelled. No repositories were changed.", flush=True)
+            return 1 if counts["failed"] else 0
+    for completed, (repo, parent, label) in enumerate(tasks):
+        try:
+            outcome = _run_with_progress(repo, parent, dry_run, completed, len(tasks),
+                                         f"{label}/{repo.name}")
+            counts[outcome] += 1
+        except (ClonerError, OSError) as exc:
+            outcome = "failed"
+            counts[outcome] += 1
+            print(f"[{label}/{repo.name}] {exc}", file=sys.stderr, flush=True)
+        print(f"Progress: {completed + 1}/{len(tasks)} ({(completed + 1) * 100 // len(tasks)}%) "
+              f"{outcome.upper()} {label}/{repo.name}", flush=True)
+    print("Done: " + " ".join(f"{key}={value}" for key, value in counts.items()), flush=True)
     return 1 if counts["failed"] else 0
 
 
@@ -915,20 +1204,44 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config", type=Path, default=Path("repositories.json"),
-        help="Configuration file (default: repositories.json); JSON paths are relative to this file",
+        help="Credentials JSON for TUI (default: repositories.json); full configuration for --batch/-i",
     )
     parser.add_argument(
         "--destination", type=Path,
-        help="Override destination; relative paths use the current working directory",
+        help="Initial TUI destination, or batch override; relative paths use the current directory",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="List clone/update candidates without Git or temporary directories",
     )
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--interactive", "-i", action="store_true",
+        help="Discover projects and select repositories from numbered menus before execution",
+    )
+    modes.add_argument(
+        "--tui", action="store_true",
+        help="Full-screen setup and selection (default; requires a terminal)",
+    )
+    modes.add_argument(
+        "--batch", action="store_true",
+        help="Run a full sources configuration without terminal menus",
+    )
     args = parser.parse_args()
     try:
-        return run(args.config, args.dry_run, args.destination)
+        if not args.batch and not args.interactive:
+            from repo_cloner_tui import TerminalUI
+
+            ui = TerminalUI()
+            credentials = json.loads(args.config.read_text(encoding="utf-8-sig"))
+            if not isinstance(credentials, dict) or set(credentials) - {"username", "token"}:
+                raise ClonerError("TUI config must contain only username and token; use --batch or -i for a legacy sources file")
+            # Validate before opening setup; never display authentication values.
+            Api("https://example.com", credentials)
+            config = ui.configure(credentials, args.config, args.destination)
+            return run(args.config, args.dry_run, ui=ui, config=config)
+        return run(args.config, args.dry_run, args.destination, interactive=args.interactive)
     except (ClonerError, OSError, ValueError, TypeError, KeyError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

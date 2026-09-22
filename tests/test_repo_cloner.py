@@ -1213,7 +1213,8 @@ class CloneFlowTests(unittest.TestCase):
         config = self.root / "config.json"
         config.write_text(json.dumps({"sources": [{"name": "a"}]}), encoding="utf-8")
         repo = app.Repository("repo", "git@example.com:p/repo.git")
-        with patch.object(app, "repositories", return_value=[repo, repo]), \
+        other = app.Repository("other", "git@example.com:p/other.git")
+        with patch.object(app, "repositories", return_value=[repo, other]), \
                 patch.object(app, "clone", side_effect=[app.ClonerError("failure"), "planned"]):
             self.assertEqual(app.run(config, True), 1)
         self.assertIn("planned=1 failed=1", self.output.getvalue())
@@ -1229,7 +1230,7 @@ class CloneFlowTests(unittest.TestCase):
 
     def test_main_returns_130_on_interrupt(self):
         with patch.object(app, "run", side_effect=KeyboardInterrupt), \
-                patch("sys.argv", ["repo_cloner.py"]):
+                patch("sys.argv", ["repo_cloner.py", "--batch"]):
             self.assertEqual(app.main(), 130)
         self.assertIn("Interrupted", self.output.getvalue())
 
@@ -1297,7 +1298,7 @@ class DestinationSelectionTests(unittest.TestCase):
         os.chdir(self.root)
         try:
             with patch("sys.argv", [
-                "repo_cloner.py", "--config", str(self.config),
+                "repo_cloner.py", "--batch", "--config", str(self.config),
                 "--destination", "command copies", "--dry-run",
             ]):
                 self.assertEqual(app.main(), 0)

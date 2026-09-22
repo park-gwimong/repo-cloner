@@ -1,282 +1,135 @@
 # Project Repo Cloner
 
-GitHub 조직·Bitbucket 프로젝트 또는 직접 지정한 Git URL 목록을 일괄 clone하고 안전하게 갱신하는 Python CLI입니다.
-Python 3.10 이상과 Git이 필요하며, 런타임 외부 라이브러리는 없습니다. Windows, macOS, Linux에서 사용할 수 있습니다.
+GitHub 조직, Bitbucket 프로젝트, 직접 지정한 Git URL의 저장소를 일괄 clone하고 안전하게 갱신하는 터미널 도구입니다.
+**기본 실행은 TUI**입니다. 저장 경로와 조회할 서비스를 화면에서 설정한 뒤 프로젝트·저장소를 선택합니다.
+Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 없습니다.
 
 ## 빠른 시작
 
-`repositories.example.json`을 `repositories.json`으로 복사한 뒤 사용할 source만 남기고 값을 수정하세요.
+`repositories.example.json`을 `repositories.json`으로 복사하고 인증 정보를 입력하세요.
 
 ```json
 {
-  "destination": "./clones",
-  "protocol": "ssh",
-  "sources": [
-    {
-      "name": "my-project",
-      "provider": "bitbucket-cloud",
-      "workspace": "my-workspace",
-      "project": "PROJ",
-      "username": "you@example.com",
-      "token": "YOUR_TOKEN"
-    }
-  ]
+  "username": "you@example.com",
+  "token": "YOUR_TOKEN"
 }
 ```
 
-API 인증 정보는 각 source의 `username`과 `token`에 직접 입력합니다.
-Bitbucket Cloud API 토큰은 `username`에 토큰을 발급한 계정 이메일을 입력합니다.
-`.env`와 환경변수는 API 인증에 사용하지 않습니다. `repositories.json`은 Git 제외 대상입니다.
-
-실행 코드는 모든 OS에서 동일합니다. 환경에 따라 `python` 대신 `python3`를 사용하세요.
+`repositories.json`에는 **username과 token만** 저장합니다. 저장 경로, provider, workspace, 조직,
+프로젝트, 저장소 목록은 TUI에서 설정하며 파일에 기록하지 않습니다. 실행할 때마다 다시 설정합니다.
+인증 정보는 화면에 표시하지 않습니다. 이 파일은 Git 제외 대상입니다.
 
 ```bash
-# 실제 API로 대상 조회. 폴더 생성 및 clone 없음
-python repo_cloner.py --config repositories.json --dry-run
-
-# 일괄 clone
-python repo_cloner.py --config repositories.json
-```
-
-CLI 명령으로 설치해서 사용할 수도 있습니다.
-
-```bash
+python repo_cloner.py
+# Git 실행 없이 설정·조회·미리 보기
+python repo_cloner.py --dry-run
+# 설치 후 명령으로 실행
 python -m pip install .
-repo-cloner --config repositories.json --dry-run
-repo-cloner --config repositories.json
+repo-cloner
 ```
 
-## 어디에서 가져와 어디에 저장하나요?
+## TUI 실행 흐름
 
-이 도구의 복제 대상은 **원격 Git 저장소**입니다. 일반 로컬 폴더 복사나
-미커밋 작업까지 포함하는 백업 도구는 아닙니다.
+1. **저장 경로 입력**: 기본값은 인증 파일 옆의 `clones`입니다. 직접 입력하는 상대 경로는 현재 실행 폴더 기준이며 `~`를 지원합니다. 입력만으로 폴더를 만들지 않습니다.
+2. **SSH / HTTPS 선택**: API에서 가져올 저장소의 clone URL 형식을 선택합니다.
+3. **서비스 설정**: Bitbucket Cloud는 인증 계정이 접근 가능한 워크스페이스를 조회해 목록에서 선택합니다. GitHub 조직·API 주소, Bitbucket Server의 HTTPS 주소 또는 직접 Git URL은 입력합니다.
+4. **연결 추가**: 필요하면 다른 서비스 연결이나 직접 Git URL을 추가합니다. 별도의 source 폴더 이름은 입력하지 않습니다. 프로젝트 정보가 없는 직접 Git URL은 묶어서 저장할 프로젝트명을 입력합니다.
+5. **프로젝트·저장소 선택**: 접근 가능한 목록을 조회하고 여러 항목을 선택합니다.
+6. **대상 확인**: 작업 종류와 최종 저장 경로를 검토한 뒤 `Enter` 또는 `Y`로 실행합니다. `N`, `Esc`, `Q`는 실행을 취소합니다.
 
-```text
-최종 경로 = 저장 루트 / source.name / 저장소 이름
+Bitbucket 프로젝트는 `<저장 경로>/<프로젝트명>/<저장소 이름>`에 저장됩니다.
+폴더명은 API에서 조회한 프로젝트 표시 이름이며 프로젝트 키는 조회에만 사용합니다.
+예를 들어 `KEY` 키의 프로젝트명이 `관제 시스템`이면 `clones/관제 시스템/api` 형태입니다.
+GitHub는 `<저장 경로>/<조직명>/<저장소 이름>`, 직접 Git URL은 `<저장 경로>/<입력한 프로젝트명>/<저장소 이름>`에 저장됩니다.
+같은 이름의 프로젝트를 동시에 선택하거나 프로젝트명을 폴더명으로 사용할 수 없으면 실행 전에 오류로 중단합니다.
+기존 `--batch` 및 `-i`의 설정 기반 경로 규칙은 유지됩니다.
+저장 경로를 바꾸면 새 경로를 대상으로 실행하며 기존 폴더를 이동하지 않습니다.
 
-D:/GitCopies/
-└── personal/                  ← source.name
-    └── repo-cloner/            ← 원격 저장소 이름 또는 직접 지정한 name
-        ├── .git/
-        └── ...
-```
+입력 화면에서는 `Ctrl+U`로 기존 값을 지우고 새 값을 입력하세요. 한글·공백·대소문자를 유지합니다.
+`←` / `→`, `Home` / `End`로 입력 위치를 이동하고 `Backspace`로 삭제합니다.
+입력 중 `Q`는 일반 문자이며 `Esc` 또는 `Ctrl+C`로 취소합니다.
 
-| 지정 방법 | 상대 경로 기준 | 예 |
-| --- | --- | --- |
-| JSON의 `destination` | 설정 파일이 있는 폴더 | `"destination": "../copies"` |
-| CLI의 `--destination` | 명령을 실행한 현재 폴더 | `--destination ./copies` |
-| 절대 경로 | 그대로 사용 | Windows `D:/GitCopies`, macOS `/Users/me/GitCopies`, Linux `/home/me/GitCopies` |
+| 선택 화면 키 | 동작 |
+| --- | --- |
+| `↑` / `↓`, `k` / `j` | 항목 이동 |
+| `Space` | 다중 선택 화면에서 선택/해제 |
+| `A` / `N` | 전체 선택/해제 |
+| `Enter` | 다음 단계 또는 단일 옵션 선택 |
+| `PageUp` / `PageDown`, `Home` / `End` | 긴 목록 이동 |
+| `←` / `→` | 긴 저장 경로 좌우 스크롤 |
+| `Q`, `Esc`, `Ctrl+C` | 취소 |
 
-`--destination`이 JSON보다 우선합니다. 둘 다 생략하면 설정 파일 옆 `clones`가
-저장 루트입니다. `~`는 사용자 홈으로 확장하지만 JSON 안의 `$HOME`·`%USERPROFILE%`
-같은 환경변수 표현은 치환하지 않습니다. JSON의 Windows 경로는 `D:/GitCopies`처럼
-슬래시를 쓰거나 `D:\\GitCopies`처럼 역슬래시를 이스케이프하세요.
+다중 선택의 초기 상태는 선택 없음입니다. dry-run 확인 화면에서는 `Enter`로 미리 보기를 마칩니다.
+목록 조회, clone/update 진행률, Git 로그와 최종 집계는 일반 터미널 화면에 표시됩니다.
+메뉴를 닫으면 이전 화면과 커서를 복구합니다.
+Windows ANSI 콘솔(예: Windows Terminal), macOS/Linux 터미널에서 최소 61열 × 12행으로 사용하세요.
+크기를 바꾸면 다음 키 입력 때 다시 그립니다. 파일·파이프 입출력 환경에서는 `--batch`를 사용하세요.
 
-예를 들어 `C:/settings/repositories.json`의 `destination`이 `./clones`라면,
-어느 폴더에서 실행해도 `C:/settings/clones` 아래에 저장됩니다.
-설정 파일을 다른 폴더로 옮기면 상대 저장 위치도 달라집니다.
+## 인증
 
-```powershell
-# Windows: 공백이 있는 경로는 따옴표로 감쌉니다.
-python repo_cloner.py --config C:/settings/repositories.json --destination "D:/Git Copies" --dry-run
-```
+- Bitbucket Cloud: `username`은 토큰을 발급한 계정 이메일, `token`은 Bitbucket API 토큰입니다. 둘을 Basic 인증에 사용합니다.
+- GitHub, Bitbucket Server / Data Center: `token`을 Bearer 인증에 사용하며 `username`은 전송하지 않습니다.
+- 직접 Git URL: 목록 조회 API 인증을 사용하지 않습니다.
+- Bearer 인증만 필요하면 `username`을 생략할 수 있습니다. 익명 조회나 직접 URL만 사용하면 `{}`도 허용합니다. 항목을 지정한 경우 빈 문자열은 허용하지 않습니다.
+
+이번 실행에 추가한 API source들은 같은 토큰을 사용하므로 해당 서비스에 맞는 인증 파일을 선택하세요.
+다른 계정은 `--config`로 별도 인증 파일을 지정할 수 있습니다. `.env`·환경변수는 API 인증에 사용하지 않습니다.
+**목록 조회 인증과 Git clone 인증은 별개입니다.** SSH 키 또는 Git Credential Manager 등 로컬 Git 인증을 설정하세요.
+Git URL에는 비밀번호나 토큰을 넣지 않습니다. Bitbucket Cloud 토큰에는 저장소 조회용 `read:repository:bitbucket`과 워크스페이스 선택용 `read:workspace:bitbucket` scope가 필요합니다.
+워크스페이스는 [공식 사용자 워크스페이스 API](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-workspaces/#api-user-workspaces-get)로 모든 페이지를 조회합니다.
+목록에서는 이름과 식별자를 표시하며, 이름이 없는 응답은 식별자만 표시합니다. 방향키와 `Enter`로 선택하고 `Esc`·`Q`로 취소할 수 있습니다.
+조회 실패나 빈 목록이면 원인을 안내하고 중단하며, workspace를 직접 입력하도록 전환하지 않습니다.
+
+## 실행 옵션
+
+| 옵션 | 동작 |
+| --- | --- |
+| 옵션 없음 / `--tui` | TUI 설정 및 프로젝트·저장소 선택 |
+| `--config PATH` | 인증 JSON 경로. 기본값 `repositories.json` |
+| `--destination PATH` | TUI 저장 경로의 초기값. 화면에서 변경 가능 |
+| `--dry-run` | 조회·대상 표시만 수행. Git 실행 및 폴더 생성 없음 |
+| `--batch` | 별도의 전체 source 설정 파일로 확인 입력 없이 일괄 실행 |
+| `--interactive`, `-i` | 별도의 전체 source 설정 파일로 기존 번호 입력 모드 실행 |
+| `--help` | 도움말 |
+
+`--tui`, `--batch`, `-i`는 함께 사용할 수 없습니다.
+기존 전체 설정 파일은 별도 이름으로 보관하고 `--batch` 또는 `-i`로 실행하세요.
+TUI는 인증 전용 형식을 검사하며 기존 전체 설정 파일을 자동 변경하지 않습니다.
 
 ```bash
-# macOS / Linux: 사용자 홈 아래에 저장
-python3 repo_cloner.py --config ./repositories.json --destination ~/GitCopies --dry-run
+python repo_cloner.py --destination "D:/Git Copies"
+python repo_cloner.py --batch --config batch.json --dry-run
+python repo_cloner.py --batch --config batch.json
+python repo_cloner.py -i --config batch.json
 ```
 
-저장 루트나 `source.name`을 바꾸면 **기존 폴더를 이동하지 않고 새 경로를 대상으로**
-실행합니다. 같은 경로를 다시 사용하면 아래의 안전한 갱신 정책을 적용합니다.
+전체 설정 예제는 [repositories.batch.example.json](repositories.batch.example.json),
+프로젝트별 설정·include/exclude·API 문제 해결 및 갱신 조건은 [일괄 실행 참고 문서](docs/BATCH.md)를 보세요.
+별도 파일에 실제 토큰을 넣었다면 해당 파일도 커밋하지 마세요.
 
-## 개별 저장소 URL로 시작하기
+## 안전한 갱신과 결과
 
-개인 계정 저장소나 일부 저장소만 복제하려면 다음 내용을 별도 설정 파일로 저장하세요.
-`provider: "git"`은 목록 조회 API나 API 토큰 없이 지정된 URL을 사용합니다.
-실제 복제·갱신에는 여전히 Git과 해당 URL의 접근 권한이 필요합니다.
+없는 경로는 clone하고 기존 일반 디렉터리는 안전 조건을 확인한 뒤 현재 upstream만 fast-forward합니다.
+원격 URL이 다르거나 로컬 수정·untracked 파일·진행 중 Git 작업·불명확한 upstream이 있으면 건너뜁니다.
+로컬 커밋은 보존하며 stash, reset, clean, rebase를 실행하지 않습니다. 서브모듈도 자동 초기화하지 않습니다.
+`UPDATE?`는 갱신 후보이며 안전 검사가 끝났다는 뜻은 아닙니다.
 
-```json
-{
-  "destination": "./clones",
-  "sources": [
-    {
-      "name": "personal",
-      "provider": "git",
-      "repositories": [
-        {
-          "name": "repo-cloner",
-          "url": "https://github.com/park-gwimong/repo-cloner.git"
-        }
-      ]
-    }
-  ]
-}
-```
+진행률은 처리한 저장소 수를 기준으로 하며 마지막에 `cloned`, `updated`, `unchanged`,
+`skipped`, `planned`, `failed`를 집계합니다. 실패한 source·저장소 뒤에도 나머지를 처리합니다.
+실패가 있으면 종료 코드 1, 정상 종료는 0, 키보드 취소는 130입니다.
+실행 전 확인에서 취소하면 변경 없이 종료하며 앞선 조회 실패가 없다면 0입니다.
+실행 도중 중단했을 때는 이미 완료한 작업을 되돌리지 않습니다.
 
-```bash
-# 위 JSON을 personal.json에 저장한 경우
-python repo_cloner.py --config personal.json --dry-run
-python repo_cloner.py --config personal.json
-```
+실패한 clone은 `.clone-<임의 값>` 임시 폴더나 불완전한 최종 폴더를 남길 수 있습니다.
+출력된 경로를 확인한 뒤 다시 실행하세요. 동시에 같은 저장 경로를 변경하지 마세요.
+dry-run은 API 조회는 수행하지만 Git 실행·폴더 생성·기존 저장소 갱신 자격 검사는 하지 않습니다.
 
-- `repositories`는 비어 있지 않은 목록이며 각 항목의 `name`, `url`은 필수입니다.
-- `name`은 로컬 폴더 이름입니다. 원격 이름과 다르게 지정할 수 있으며 URL에서 추측하지 않습니다.
-- 같은 source 안에서 대소문자만 다른 이름도 중복으로 거절합니다.
-  `../repo`, `a/b` 같은 경로를 `name`으로 지정할 수 없습니다.
-- 지원 URL은 `https://host/owner/repo.git`, `ssh://git@host/owner/repo.git`,
-  `git@host:owner/repo.git` 형태입니다. 로컬 경로·`file://`·실행형 remote helper는 거절합니다.
-- 이 모드에서는 전역 `protocol`로 URL을 바꾸지 않습니다. HTTPS/SSH URL을 그대로 사용합니다.
-  비밀번호나 HTTPS 사용자 정보·토큰을 URL에 넣지 말고 Git 인증 설정을 사용하세요.
-- source 목록 안에서 다른 provider와 함께 사용할 수 있습니다.
-
-## 조직·프로젝트에서 필요한 저장소만 선택하기
-
-모든 source에서 `include`와 `exclude`로 **저장소 이름**을 필터링할 수 있습니다.
-API provider는 조회된 이름/slug, `git` provider는 직접 지정한 `name`을 비교합니다.
-
-```json
-{
-  "name": "team",
-  "provider": "github",
-  "organization": "YOUR_ORGANIZATION",
-  "token": "YOUR_TOKEN",
-  "include": ["api-*", "web-?"],
-  "exclude": ["*-old", "*-archive"]
-}
-```
-
-- 패턴은 `*`, `?`, `[abc]`를 지원하는 glob이며 정규식이 아닙니다.
-  Windows에서도 대소문자를 구분합니다.
-- `include`가 생략되거나 `[]`이면 전체가 후보입니다. 값이 있으면 하나 이상 일치해야 합니다.
-- `exclude`는 **항상 우선**합니다. 두 규칙에 모두 맞으면 제외합니다.
-- 위 예에서 `api-core`, `web-a`는 선택되고 `api-old`, `notes`, `API-extra`는 제외됩니다.
-- 문자열 하나가 아니라 문자열 목록을 사용하세요. `"include": "api-*"`는 오류입니다.
-- 제외한 저장소는 clone/update하지 않고 `skipped`로 집계합니다.
-  모두 제외되어도 정상 종료(0)하며 저장 폴더를 만들지 않습니다.
-- API provider의 필터는 **목록 조회 후** 적용합니다. API 접근 권한이나 페이지 조회를 생략하지 않습니다.
-
-## 실행 전 원본과 최종 경로 확인하기
-
-`--dry-run`은 저장 루트와 원격 URL → 로컬 경로를 표시합니다.
-
-```text
-Destination: D:\GitCopies
-[personal] Found 1 repositories
-PLAN  CLONE https://github.com/park-gwimong/repo-cloner.git -> D:\GitCopies\personal\repo-cloner
-```
-
-`CLONE`은 없는 경로, `UPDATE?`는 이미 있는 일반 디렉터리의 갱신 후보입니다.
-`UPDATE?`는 원격 일치·로컬 수정 여부 등 **갱신 자격을 검사했다는 뜻이 아닙니다**.
-파일·링크 같은 비대상이나 이름 필터 제외 항목은 `SKIP`으로 표시됩니다.
-Git 실행과 폴더 생성은 없으며 API provider만 목록 조회를 위해 네트워크를 사용합니다.
-경로와 대상을 확인한 뒤 같은 명령에서 `--dry-run`을 빼면 실제 실행합니다.
-
-## 지원 서비스
-
-| provider | 조회 단위 | 필수 설정 | API 인증 |
-| --- | --- | --- | --- |
-| `git` | 직접 지정한 URL 목록 | `repositories`: `name`·`url` 목록 | API 인증 없음; Git 접근 권한 필요 |
-| `github` | GitHub Organization | `organization` | `token`: PAT 등 |
-| `bitbucket-cloud` | workspace 안의 프로젝트 | `workspace`, `project` | `username`: 이메일, `token`: API 토큰 |
-| `bitbucket-server` | Server / Data Center 프로젝트 | `baseUrl`, `project` | `token`: 개인 액세스 토큰 |
-
-여러 프로젝트는 `sources`에 추가합니다. source마다 고유한 `name`을 지정하세요.
-예제 파일에는 세 API 서비스와 직접 URL 지정 예제가 있습니다. 사용할 source만 남기세요.
-
-각 source에 인증 값을 직접 지정합니다. 여러 source는 같은 값을 사용하거나 서로 다른 값을 사용할 수 있습니다.
-
-- `destination`: 저장 위치. 상대 경로는 설정 파일 위치 기준입니다.
-- `protocol`: `ssh`(기본값) 또는 `https`.
-- `project`: Bitbucket의 표시 이름이 아닌 프로젝트 **키**.
-- `token`, `username`: 인증에 사용할 **실제 값**. 둘 다 생략하면 익명 조회, `token`만 있으면 Bearer 인증, 둘 다 있으면 Basic 인증을 사용합니다. 빈 값은 허용하지 않습니다. 이전 `tokenEnv`·`usernameEnv` 설정은 오류로 안내합니다.
-- `github.apiUrl`: Enterprise 사용 시 `https://github.example.com/api/v3` 지정.
-- `bitbucket-server.baseUrl`: 예: `https://bitbucket.example.com` 또는 context path를 포함한 주소.
-- 공개 저장소를 익명 조회하려면 `token`를 생략합니다. Bearer 방식의 Bitbucket Cloud access token 사용 시 `username`를 생략합니다.
-
-`github` provider는 Organization 전체를 조회한 뒤 이름 필터를 적용합니다. GitHub Projects 보드 및 개인 계정 단위 자동 조회는 지원하지 않습니다. 개인 저장소는 `git` provider로 URL을 지정할 수 있습니다. 토큰 권한으로 조회 가능한 저장소만 포함되며, 모든 페이지를 순회합니다. 조직의 토큰 승인이나 SSO 설정에 따라 접근 범위가 제한될 수 있습니다.
-
-**목록 조회 인증과 Git clone 인증은 별개입니다.** SSH는 제공자에 등록한 SSH 키, HTTPS는 Git Credential Manager 등 로컬 Git 인증 설정을 사용합니다. 토큰을 Git URL에 삽입하지 않습니다.
-
-## 재실행과 안전한 갱신
-
-결과는 `<저장 루트>/<source 이름>/<저장소 이름>`에 저장됩니다. 없는 경로는 clone하고,
-이미 있는 **일반 디렉터리**는 안전 조건을 모두 만족할 때만 현재 브랜치의 명시적
-upstream을 갱신합니다. 별도 `--update` 옵션은 없습니다. 실행 중 같은 저장소나
-출력 위치를 다른 프로세스에서 변경하지 마세요. 이 도구는 경쟁 상태를 원자적으로
-잠그지 않습니다.
-
-기존 저장소를 갱신하려면 다음 조건이 모두 필요합니다.
-
-- `.git` worktree이며 현재 브랜치에 커밋과 단일 원격 upstream이 있어야 합니다.
-- `branch.<현재 브랜치>.remote/merge`가 하나의 원격 `refs/heads/*`를 가리키고,
-  원격 fetch refspec에서 실제로 하나의 직접 `refs/remotes/*` tracking ref로
-  해석되어야 합니다. 설정에 없는 목적지를 임의로 만들지 않으며 custom tracking
-  경로도 안전한 단일 매핑이면 사용할 수 있습니다. detached/unborn HEAD, local
-  upstream, 복수/누락/기호식 매핑, 진행 중 merge/rebase/cherry-pick/revert/bisect,
-  index 잠금은 건너뜁니다.
-- 현재 upstream 원격의 fetch URL 하나가 API가 반환한 clone URL과 **엄격히 같은
-  형식과 주소**여야 합니다. HTTPS끼리, `ssh://`끼리, SCP형(`git@host:path`)끼리만
-  비교합니다. ASCII host 대소문자와 HTTPS 443/SSH 22의 생략만 정규화하며,
-  `.git`, 끝 `/`, 경로 대소문자/encoding, SSH 사용자, alias, 식별을 바꾸는
-  `insteadOf`, query/fragment/userinfo 차이는 추정하지 않습니다. 다르면
-  `skipped`입니다.
-  `pushurl`은 비교하지 않습니다.
-
-예를 들어 `https://example.com/org/repo`와
-`https://EXAMPLE.com:443/org/repo`는 같은 주소로 보지만,
-`https://example.com/org/repo.git`, `ssh://example.com/org/repo`,
-`git@example.com:org/repo`, `https://example.com/org/repo/`는 각각 다른
-표현이므로 갱신하지 않습니다.
-- staged/unstaged/삭제/untracked 파일, dirty submodule, assume-unchanged/
-  skip-worktree 인덱스 항목이 없어야 합니다.
-
-조건을 통과하면 현재 upstream 한 개만 목적지 ref 없이 `FETCH_HEAD`로 가져옵니다.
-`--refmap=`, `--no-tags`, `--no-prune`으로 다른 branch/tag/tracking ref의 변경을
-막으며 서브모듈은 초기화하거나 재귀 fetch하지 않습니다. 가져온 단일 커밋을
-검증한 뒤 기존 tracking ref가 검사 당시 값일 때만 원자적 비교·교환으로 갱신합니다.
-현재 로컬 브랜치는 그 정확한 커밋 ID까지 fast-forward만 수행합니다.
-local-only 또는 diverged 커밋은 보존하고 `skipped`로 끝납니다.
-원격 이력이 교체되거나 되감겨도 로컬 커밋은 버리지 않습니다. 다만 `skipped`여도
-`FETCH_HEAD`와 해당 tracking metadata/OID는 새 원격 상태를 반영할 수 있습니다.
-작업 파일, index, 로컬 branch 커밋은 보호됩니다.
-갱신 명령은 저장된 hook 설정을 바꾸지 않고 작업 트리 밖의 빈 임시 hook 디렉터리를
-사용합니다.
-
-`--dry-run`은 API 목록 조회만 수행합니다. Git 실행, 임시 디렉터리 생성, clone,
-worktree 검사, 기존 디렉터리 갱신 자격 판정은 하지 않습니다. 없는 clone 대상과
-기존 일반 디렉터리는 `planned`, 파일/심볼릭 링크/junction 같은 명백한 비대상은
-`skipped`입니다.
-
-마지막에 저장소당 한 번씩 다음 여섯 개 집계를 표시합니다.
-`cloned`, `updated`, `unchanged`, `skipped`, `planned`, `failed`.
-목록 조회 실패도 `failed`에 포함하며 한 source의 실패 뒤에도 나머지를 계속
-처리합니다. 실패가 있으면 종료 코드 1, 안전하게 건너뛴 경우는 0, 사용자가
-중단하면 130입니다. 실패한 clone은 `.clone-<임의 값>` 임시 폴더를 남길 수
-하므로 출력된 경로를 확인한 뒤 원인을 해결하고 다시 실행하세요. 갱신은 stash,
-reset, clean, rebase를 하지 않으며 서브모듈도 자동 초기화하지 않습니다. 갱신용
-임시 hook 디렉터리 정리에 실패하면 오류와 해당 절대 경로를 출력하며, 이미 수행된
-fast-forward를 되돌리지 않습니다.
-
-clone은 `.clone-<임의 값>` 폴더에서 먼저 실행됩니다. clone 실패 시 해당 경로를 출력하고 재실행 시 다시 시도합니다. 성공 후 최종 폴더로 내용을 옮기는 도중 중단되면 최종 폴더도 불완전할 수 있습니다. 출력된 경로를 확인하고 불완전한 폴더를 정리한 후 다시 실행하세요. 실행 중 같은 출력 위치를 다른 프로세스에서 변경하지 마세요.
-
-API 통신은 HTTPS만 허용하며 인증 정보 보호를 위해 리다이렉트를 따르지 않습니다. 사내 인증서는 운영체제/Python에서 신뢰하도록 설정해야 합니다.
-
-## 개발 및 기여
+## 개발
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-테스트는 실제 서비스나 토큰 없이 API 페이지 순회, 인증, dry-run, 엄격한 원격
-식별, 실제 임시 Git 원격/작업 트리의 fetch·fast-forward, 로컬 변경 보존과 실패 후
-계속 진행을 검증합니다. 테스트를 실행하려면 Git이 PATH에 있어야 하며 서브모듈이나
-외부 서비스는 사용하지 않습니다. GitHub Actions에서도 Python 3.10/3.13과
-Windows/Linux/macOS 조합으로 실행합니다.
-
-변경 시 관련 테스트와 문서를 함께 수정해주세요. 비밀 값과 로컬 설정 파일은 커밋하지 마세요. 기본 라이선스는 [MIT](LICENSE)입니다. 공개 배포 전 저작권자 정보와 패키지 이름 사용 가능 여부를 확인하세요. 이 프로젝트는 Atlassian 또는 GitHub의 공식 도구가 아닙니다.
-
-## API 문서
-
-- [GitHub 조직 저장소 목록](https://docs.github.com/en/rest/repos/repos#list-organization-repositories)
-- [Bitbucket Cloud 프로젝트별 조회](https://support.atlassian.com/bitbucket-cloud/kb/get-repository-list-within-project-by-using-api/)
-- [Bitbucket Data Center 프로젝트 API](https://developer.atlassian.com/server/bitbucket/rest/v1000/api-group-project/)
+테스트는 실제 API 토큰 없이 API 조회, 인증, TUI 설정·선택·취소, dry-run,
+임시 Git 원격을 이용한 안전한 갱신을 검증합니다. Git이 PATH에 있어야 합니다.
+라이선스는 [MIT](LICENSE)입니다.

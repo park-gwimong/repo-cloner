@@ -1,4 +1,5 @@
 /repositories.json
+/batch.json
 /clones/
 __pycache__/
 *.py[cod]
