@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from contextvars import ContextVar
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 import json
@@ -28,6 +29,14 @@ from uuid import uuid4
 
 class ClonerError(Exception):
     """An actionable configuration, API or clone error."""
+
+
+_git_process_runner = ContextVar("git_process_runner", default=None)
+
+
+def _run_git_process(command, **kwargs):
+    runner = _git_process_runner.get()
+    return (runner or subprocess.run)(command, **kwargs)
 
 
 class _SkipUpdate(Exception):
@@ -182,7 +191,7 @@ def _git(
         command.append("--no-optional-locks")
     command.extend(args)
     try:
-        return subprocess.run(
+        return _run_git_process(
             command,
             cwd=str(target_abs),
             check=check,
@@ -758,6 +767,15 @@ def clone_link(item: dict, protocol: str, server: bool = False) -> Repository:
     raise ClonerError(f"Missing {protocol} clone URL for {item['slug']}")
 
 
+def github_account(source: dict) -> str:
+    """Resolve the token owner's login without relying on a configured username."""
+    api = Api(source.get("apiUrl", "https://api.github.com"), {"token": required(source, "token")})
+    user = api.get(f"{api.base}/user")
+    if not isinstance(user, dict):
+        raise ClonerError("Invalid GitHub account response")
+    return folder_name(required(user, "login"))
+
+
 def repositories(source: dict, protocol: str) -> Iterator[Repository]:
     provider = required(source, "provider")
     if provider == "git":
@@ -778,12 +796,21 @@ def repositories(source: dict, protocol: str) -> Iterator[Repository]:
             names.add(name.casefold())
             selected.append(Repository(name, url))
         yield from selected
-    elif provider == "github":
-        api = Api(source.get("apiUrl", "https://api.github.com"), source)
-        org = quote(required(source, "organization"), safe="")
+    elif provider in {"github", "github-user"}:
+        if provider == "github-user":
+            if "organization" in source:
+                raise ClonerError("github-user does not accept organization; use provider github for organizations")
+            api = Api(source.get("apiUrl", "https://api.github.com"), {"token": required(source, "token")})
+            endpoint = f"{api.base}/user/repos?affiliation=owner"
+        else:
+            api = Api(source.get("apiUrl", "https://api.github.com"), source)
+            org = quote(required(source, "organization"), safe="")
+            endpoint = f"{api.base}/orgs/{org}/repos?type=all"
         page = 1
         while True:
-            items = api.get(f"{api.base}/orgs/{org}/repos?type=all&per_page=100&page={page}")
+            items = api.get(f"{endpoint}&per_page=100&page={page}")
+            if not isinstance(items, list):
+                raise ClonerError("Invalid GitHub repository list response")
             for item in items:
                 yield Repository(item["name"], item["ssh_url" if protocol == "ssh" else "clone_url"])
             if len(items) < 100:
@@ -854,7 +881,7 @@ def clone(repo: Repository, parent: Path, dry_run: bool) -> str:
     temporary = parent / f".clone-{uuid4().hex}"
     print(f"CLONE {target}", flush=True)
     try:
-        subprocess.run(["git", "clone", "--progress", "--", repo.url, str(temporary)], check=True)
+        _run_git_process(["git", "clone", "--progress", "--", repo.url, str(temporary)], check=True)
         # Reserve the destination atomically; do not overwrite a concurrent clone.
         target.mkdir()
         try:
@@ -1083,7 +1110,7 @@ def _run_with_progress(repo: Repository, parent: Path, dry_run: bool,
 
 
 def run(config_path: Path, dry_run: bool = False, destination: Path | None = None,
-        *, interactive: bool = False, ui=None, config: dict | None = None) -> int:
+        *, interactive: bool = False, ui=None, config: dict | None = None, progress_ui=None) -> int:
     interactive = interactive or ui is not None
     select = ui.select if ui is not None else _select_indices
     if config is None:
@@ -1185,6 +1212,10 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         if answer not in {"y", "yes"}:
             print("Cancelled. No repositories were changed.", flush=True)
             return 1 if counts["failed"] else 0
+    if progress_ui is not None and tasks and not dry_run:
+        from repo_cloner_progress import execute
+
+        return execute(progress_ui, tasks, counts, clone, ClonerError, _git_process_runner)
     for completed, (repo, parent, label) in enumerate(tasks):
         try:
             outcome = _run_with_progress(repo, parent, dry_run, completed, len(tasks),
@@ -1240,7 +1271,7 @@ def main() -> int:
             # Validate before opening setup; never display authentication values.
             Api("https://example.com", credentials)
             config = ui.configure(credentials, args.config, args.destination)
-            return run(args.config, args.dry_run, ui=ui, config=config)
+            return run(args.config, args.dry_run, ui=ui, config=config, progress_ui=ui)
         return run(args.config, args.dry_run, args.destination, interactive=args.interactive)
     except (ClonerError, OSError, ValueError, TypeError, KeyError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

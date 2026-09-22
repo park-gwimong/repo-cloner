@@ -8,6 +8,7 @@
 | [credentials.json](credentials.json) | TUI | username·token만 포함. repositories.json으로 복사 |
 | [batch.git.json](batch.git.json) | batch / -i | API 없이 직접 Git URL 목록 사용 |
 | [batch.github.json](batch.github.json) | batch / -i | GitHub 조직의 저장소와 이름 필터 |
+| [batch.github-user.json](batch.github-user.json) | batch / -i | 토큰 소유자의 개인 저장소. name을 원하는 계정 폴더명으로 수정 |
 | [batch.bitbucket-cloud.json](batch.bitbucket-cloud.json) | batch / -i | Cloud workspace의 여러 프로젝트 |
 | [batch.bitbucket-server.json](batch.bitbucket-server.json) | batch / -i | Server / Data Center 단일 프로젝트 |
 | [batch.all-providers.json](batch.all-providers.json) | batch / -i | 전체 필드 참고. 필요한 source만 남길 것 |

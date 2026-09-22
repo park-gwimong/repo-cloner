@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-GitHub 조직, Bitbucket 프로젝트, 직접 지정한 Git URL의 저장소를 일괄 clone하고 안전하게 갱신하는 터미널 도구입니다.
+GitHub 개인 계정·조직, Bitbucket 프로젝트, 직접 지정한 Git URL의 저장소를 일괄 clone하고 안전하게 갱신하는 터미널 도구입니다.
 **기본 실행은 TUI**입니다. 저장 경로와 조회할 서비스를 화면에서 설정한 뒤 프로젝트·저장소를 선택합니다.
 Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 없습니다.
 
@@ -28,7 +28,7 @@ Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 �
 
 ## 주요 기능
 
-- GitHub Organization, Bitbucket Cloud, Bitbucket Server / Data Center 및 직접 Git URL 지원
+- GitHub 개인 계정·Organization, Bitbucket Cloud, Bitbucket Server / Data Center 및 직접 Git URL 지원
 - 키보드 TUI의 workspace → 프로젝트 → 저장소 선택과 저장 경로 편집
 - 여러 source·프로젝트를 처리하는 batch 및 include/exclude 이름 필터
 - 실행 대상과 경로 미리 보기, 저장소 단위 진행률 및 결과 집계
@@ -121,7 +121,7 @@ API 인증 전용 파일과 전체 설정 파일은 자동 병합되지 않습�
 
 1. **저장 경로 입력**: 기본값은 인증 파일 옆의 `clones`입니다. 직접 입력하는 상대 경로는 현재 실행 폴더 기준이며 `~`를 지원합니다. 입력만으로 폴더를 만들지 않습니다.
 2. **SSH / HTTPS 선택**: API에서 가져올 저장소의 clone URL 형식을 선택합니다.
-3. **서비스 설정**: Bitbucket Cloud는 인증 계정이 접근 가능한 워크스페이스를 조회해 목록에서 선택합니다. GitHub 조직·API 주소, Bitbucket Server의 HTTPS 주소 또는 직접 Git URL은 입력합니다.
+3. **서비스 설정**: Bitbucket Cloud는 워크스페이스 목록에서 선택합니다. GitHub는 개인 계정/조직을 선택하고 API 주소를 입력합니다. 개인 계정명은 토큰으로 자동 확인하며 조직명은 직접 입력합니다. Bitbucket Server의 HTTPS 주소 또는 직접 Git URL도 입력할 수 있습니다.
 4. **연결 추가**: 필요하면 다른 서비스 연결이나 직접 Git URL을 추가합니다. 별도의 source 폴더 이름은 입력하지 않습니다. 프로젝트 정보가 없는 직접 Git URL은 묶어서 저장할 프로젝트명을 입력합니다.
 5. **프로젝트·저장소 선택**: 접근 가능한 목록을 조회하고 여러 항목을 선택합니다.
 6. **대상 확인**: 작업 종류와 최종 저장 경로를 검토한 뒤 `Enter` 또는 `Y`로 실행합니다. `N`, `Esc`, `Q`는 실행을 취소합니다.
@@ -129,7 +129,7 @@ API 인증 전용 파일과 전체 설정 파일은 자동 병합되지 않습�
 Bitbucket 프로젝트는 `<저장 경로>/<프로젝트명>/<저장소 이름>`에 저장됩니다.
 폴더명은 API에서 조회한 프로젝트 표시 이름이며 프로젝트 키는 조회에만 사용합니다.
 예를 들어 `KEY` 키의 프로젝트명이 `관제 시스템`이면 `clones/관제 시스템/api` 형태입니다.
-GitHub는 `<저장 경로>/<조직명>/<저장소 이름>`, 직접 Git URL은 `<저장 경로>/<입력한 프로젝트명>/<저장소 이름>`에 저장됩니다.
+GitHub는 `<저장 경로>/<개인 계정명 또는 조직명>/<저장소 이름>`, 직접 Git URL은 `<저장 경로>/<입력한 프로젝트명>/<저장소 이름>`에 저장됩니다.
 같은 이름의 프로젝트를 동시에 선택하거나 프로젝트명을 폴더명으로 사용할 수 없으면 실행 전에 오류로 중단합니다.
 기존 `--batch` 및 `-i`의 설정 기반 경로 규칙은 유지됩니다.
 저장 경로를 바꾸면 새 경로를 대상으로 실행하며 기존 폴더를 이동하지 않습니다.
@@ -149,10 +149,34 @@ GitHub는 `<저장 경로>/<조직명>/<저장소 이름>`, 직접 Git URL은 `<
 | `Q`, `Esc`, `Ctrl+C` | 취소 |
 
 다중 선택의 초기 상태는 선택 없음입니다. dry-run 확인 화면에서는 `Enter`로 미리 보기를 마칩니다.
-목록 조회, clone/update 진행률, Git 로그와 최종 집계는 일반 터미널 화면에 표시됩니다.
+목록 조회는 일반 터미널에 표시하고, 실제 clone/update는 전체 화면 진행 TUI에 표시합니다.
+전체 진행 막대, 완료 개수, 현재 저장소, 전체·현재 작업 경과 시간, 최근 처리 결과와 Git 로그를 한 화면에서 확인할 수 있습니다.
+10초 이상 Git 출력이 없으면 무응답 시간과 프로세스 실행 중 상태를 표시합니다. 완료 후 Enter로 결과 화면을 닫습니다.
+실행 중 Q/Esc/Ctrl+C는 현재 Git 프로세스 트리를 중단하며 이미 완료한 작업은 유지합니다.
+TUI에서는 Git 인증 입력을 비활성화합니다. SSH 호스트 키 확인이나 인증이 필요하면 해당 저장소를 실패로 표시하고
+`AUTH / SSH SETUP REQUIRED`와 원인을 안내합니다. 호스트 키를 자동 승인하지 않으며, 인증을 준비한 뒤 다시 실행해야 합니다.
+Git Credential Manager/SSH 설정 외의 사용자 정의 인증 도구는 별도 대기 동작을 할 수 있으며 Q로 중단할 수 있습니다.
+실패한 저장소의 진단과 남은 임시 clone 경로는 화면 종료 후에도 터미널에 출력합니다.
 메뉴를 닫으면 이전 화면과 커서를 복구합니다.
 Windows ANSI 콘솔(예: Windows Terminal), macOS/Linux 터미널에서 최소 61열 × 12행으로 사용하세요.
 크기를 바꾸면 다음 키 입력 때 다시 그립니다. 파일·파이프 입출력 환경에서는 `--batch`를 사용하세요.
+
+### GitHub 개인 계정 사용하기
+
+```bash
+python repo_cloner.py --config repositories-github.json
+```
+
+`repositories-github.json`에는 기존처럼 username·token만 둡니다. GitHub 조회에서는 token만 사용합니다.
+`GitHub (Personal / Organization)` → `Personal account (my repositories)`를 선택하고
+GitHub API URL은 기본값 `https://api.github.com`을 사용하세요. Enterprise는 해당 서버의 API 주소를 입력합니다.
+토큰 계정이 `park-gwimong`이면 계정명을 입력할 필요 없이 `park-gwimong` 폴더 아래에 저장합니다.
+
+개인 계정 목록은 **인증된 사용자 본인 소유**의 저장소이며, 토큰이 허용하는 공개·비공개 저장소를 포함합니다.
+다른 소유자의 협업 저장소나 조직 소유 저장소는 개인 목록에 포함하지 않습니다. 조직은 Organization 메뉴,
+개별 협업 저장소는 Direct Git URLs를 사용하세요.
+공식 [인증 사용자 저장소 API](https://docs.github.com/en/rest/repos/repos#list-repositories-for-the-authenticated-user)의
+`affiliation=owner`로 조회합니다. GitHub Projects 보드는 지원하지 않습니다.
 
 ## Batch 모드
 
@@ -190,7 +214,7 @@ API provider를 사용하면 해당 source에 workspace·조직·프로젝트 �
 | 모드와 대상 | 저장 경로 |
 | --- | --- |
 | TUI Bitbucket | `<destination>/<프로젝트 표시 이름>/<저장소>` |
-| TUI GitHub | `<destination>/<조직명>/<저장소>` |
+| TUI GitHub 개인 계정 / 조직 | `<destination>/<계정명 또는 조직명>/<저장소>` |
 | TUI 직접 URL | `<destination>/<입력한 프로젝트명>/<저장소>` |
 | Batch 단일 project / GitHub / 직접 URL | `<destination>/<source.name>/<저장소>` |
 | Batch projects 목록 | `<destination>/<source.name>/<프로젝트 키>/<저장소>` |
@@ -289,6 +313,7 @@ dry-run은 API 조회는 수행하지만 Git 실행·폴더 생성·기존 저�
 repo-cloner/
 ├── repo_cloner.py               # 진입점, API, 계획, clone/update
 ├── repo_cloner_tui.py           # 키보드 입력, 설정 화면, 선택·확인
+├── repo_cloner_progress.py      # 실행 대시보드, Git 출력 수집·프로세스 취소
 ├── pyproject.toml              # 패키징 및 repo-cloner 명령
 ├── examples/                   # 인증 및 provider별 batch 예제
 ├── docs/                       # 사용·설정·안전·구조 문서
@@ -304,7 +329,7 @@ repo-cloner/
 ```
 
 핵심 파일 중심의 구조이며 로컬 자격 증명·도구 파일은 생략했습니다.
-두 Python 모듈은 소스 직접 실행과 설치 명령을 모두 지원하도록 루트에 둡니다.
+Python 모듈은 소스 직접 실행과 설치 명령을 모두 지원하도록 루트에 둡니다.
 `repo_cloner.py`가 TUI 모듈을 필요할 때 불러오므로 TUI 파일을 따로 실행할 필요가 없습니다.
 기존 루트의 예제 JSON 두 개는 `examples/credentials.json`, `examples/batch.all-providers.json`으로 이동했습니다.
 

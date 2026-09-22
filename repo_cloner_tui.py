@@ -218,7 +218,7 @@ class TerminalUI:
 
     def configure(self, credentials, config_path, destination=None):
         """Build an in-memory job. Only authentication is read from JSON."""
-        from repo_cloner import ClonerError, folder_name, _remote_identity, available_workspaces
+        from repo_cloner import ClonerError, folder_name, _remote_identity, available_workspaces, github_account
         from urllib.parse import urlsplit
 
         def folder(value):
@@ -252,7 +252,7 @@ class TerminalUI:
         sources = []
         while True:
             provider = ["bitbucket-cloud", "github", "bitbucket-server", "git"][self.choose(
-                "Repository provider", ["Bitbucket Cloud", "GitHub Organization",
+                "Repository provider", ["Bitbucket Cloud", "GitHub (Personal / Organization)",
                                         "Bitbucket Server / Data Center", "Direct Git URLs"])]
             source = {"provider": provider}
             if provider == "bitbucket-cloud":
@@ -263,14 +263,24 @@ class TerminalUI:
                     f"{name} ({slug})" if name != slug else slug for slug, name in workspaces])
                 source["workspace"] = workspaces[selected][0]
             elif provider == "github":
-                source["organization"] = self.edit("GitHub organization")
+                account_type = self.choose("GitHub account type", ["Personal account (my repositories)", "Organization"])
+                if account_type == 1:
+                    source["organization"] = self.edit("GitHub organization")
                 source["apiUrl"] = self.edit("GitHub API URL", "https://api.github.com", https_url)
+                if account_type == 0:
+                    provider = source["provider"] = "github-user"
+                    if "token" not in credentials:
+                        raise ClonerError("GitHub personal account requires token in the credentials JSON")
+                    source["token"] = credentials["token"]
+                    print("Discovering authenticated GitHub account...", flush=True)
+                    source["name"] = github_account(source)
             elif provider == "bitbucket-server":
                 source["baseUrl"] = self.edit("Bitbucket server HTTPS URL", validator=https_url)
 
             # Bitbucket folder names come from project discovery, not a user alias.
-            source["name"] = (source["organization"] if provider == "github"
-                              else f"source-{len(sources) + 1}")
+            if "name" not in source:
+                source["name"] = (source["organization"] if provider == "github"
+                                  else f"source-{len(sources) + 1}")
             if provider == "git":
                 # Direct URLs have no project metadata to discover.
                 source["name"] = self.edit("Project name for these Git repositories", validator=folder)

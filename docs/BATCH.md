@@ -67,6 +67,10 @@ macOS/Linux에서는 환경에 따라 `python3`를 사용하세요. 명령 예�
 batch는 workspace나 프로젝트 목록을 찾아 선택하지 않습니다. 설정의 workspace 및 프로젝트 **키**를 사용합니다.
 프로젝트 표시 이름을 키 대신 넣으면 기대한 저장소를 찾지 못할 수 있습니다.
 
+GitHub 개인 계정은 [github-user 예제](../examples/batch.github-user.json)를 사용합니다.
+`provider: "github-user"`와 token을 지정하면 본인 소유 저장소를 조회하며 organization 필드는 넣지 않습니다.
+계정명 입력은 필요 없고 저장 폴더명은 source.name으로 지정합니다. 조직은 기존 provider github를 사용합니다.
+
 `--dry-run`은 Git 실행·폴더 생성·로컬 갱신 자격 검사를 하지 않습니다. API source는 조회를 위해 네트워크와 인증이 필요합니다.
 실행 전 표시되는 `UPDATE?`는 갱신 후보라는 뜻입니다. dry-run 성공만으로 Git 인증이나 실제 갱신 성공이 보장되지는 않습니다.
 
@@ -77,6 +81,7 @@ batch는 workspace나 프로젝트 목록을 찾아 선택하지 않습니다. �
 | Bitbucket 단일 `project` | `<destination>/<source.name>/<repository>` |
 | Bitbucket `projects` 목록 | `<destination>/<source.name>/<PROJECT_KEY>/<repository>` |
 | GitHub 조직 | `<destination>/<source.name>/<repository>` |
+| GitHub 개인 계정 (`github-user`) | `<destination>/<source.name>/<repository>` |
 | 직접 Git URL | `<destination>/<source.name>/<repository.name>` |
 
 TUI의 `<destination>/<프로젝트 표시 이름>/<repository>`와 경로 규칙이 다릅니다.

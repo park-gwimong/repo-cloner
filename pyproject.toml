@@ -16,4 +16,4 @@ dependencies = []
 repo-cloner = "repo_cloner:main"
 
 [tool.setuptools]
-py-modules = ["repo_cloner", "repo_cloner_tui"]
+py-modules = ["repo_cloner", "repo_cloner_tui", "repo_cloner_progress"]

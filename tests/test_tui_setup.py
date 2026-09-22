@@ -58,7 +58,7 @@ class SetupTests(unittest.TestCase):
     def test_github_uses_bearer_and_cli_destination_is_editable_default(self):
         initial = self.root / "initial"
         changed = self.root / "changed"
-        with patch.object(self.ui, "choose", side_effect=[0, 1, 0]), \
+        with patch.object(self.ui, "choose", side_effect=[0, 1, 1, 0]), \
                 patch.object(self.ui, "edit", side_effect=[str(changed), "org", "https://api.github.com"]) as edit:
             config = self.ui.configure(self.credentials, self.path, initial)
         self.assertEqual(edit.call_args_list[0].args[1], str(initial))
@@ -121,7 +121,7 @@ class SetupTests(unittest.TestCase):
                 patch.object(app, "run", return_value=0) as run:
             self.assertEqual(app.main(), 0)
         ui.configure.assert_called_once_with(self.credentials, self.path, None)
-        run.assert_called_once_with(self.path, True, ui=ui, config=ui.configure.return_value)
+        run.assert_called_once_with(self.path, True, ui=ui, config=ui.configure.return_value, progress_ui=ui)
 
     def test_cli_batch_does_not_open_tui(self):
         with patch("sys.argv", ["repo-cloner", "--batch"]), \

@@ -1,0 +1,13 @@
+{
+  "destination": "./clones",
+  "protocol": "ssh",
+  "sources": [
+    {
+      "name": "my-github-account",
+      "provider": "github-user",
+      "token": "YOUR_TOKEN",
+      "include": [],
+      "exclude": []
+    }
+  ]
+}

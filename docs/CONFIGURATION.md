@@ -38,13 +38,14 @@ token만 있으면 Bearer 인증, `{}`는 익명 조회·직접 URL 용도입니
 | 필드 | 형식 | 설명 |
 | --- | --- | --- |
 | `name` | 필수 문자열 | 저장 폴더 이름. source 간 대소문자를 무시하고 고유해야 함 |
-| `provider` | 필수 문자열 | github, bitbucket-cloud, bitbucket-server, git |
+| `provider` | 필수 문자열 | github, github-user, bitbucket-cloud, bitbucket-server, git |
 | `include` | 문자열 배열 / `[]` | 저장소 이름 glob. 빈 목록이면 전체 후보 |
 | `exclude` | 문자열 배열 / `[]` | 저장소 이름 glob. include보다 우선 |
 | `token` | 선택 문자열 | 실제 API 토큰. 환경변수 이름이 아님 |
 | `username` | 선택 문자열 | token과 함께 있으면 Basic 인증. token 없이 단독 사용 불가 |
 
-batch에서는 provider에 상관없이 두 인증 필드가 있으면 Basic, token만 있으면 Bearer 인증입니다.
+batch의 기존 API provider는 두 인증 필드가 있으면 Basic, token만 있으면 Bearer 인증입니다.
+`github-user`는 token이 필수이며 username 유무와 관계없이 Bearer 인증을 사용합니다.
 GitHub·Bitbucket Server PAT 예제는 username 없이 token만 지정합니다. 직접 URL provider는 API 인증을 사용하지 않습니다.
 `tokenEnv`, `usernameEnv`, `.env` 기반 API 인증은 지원하지 않습니다.
 
@@ -53,6 +54,7 @@ GitHub·Bitbucket Server PAT 예제는 username 없이 token만 지정합니다.
 | provider | 필수 항목 | 선택 항목 / 범위 |
 | --- | --- | --- |
 | `github` | `organization` | `apiUrl` 기본 https://api.github.com. GitHub Enterprise API URL 지정 가능 |
+| `github-user` | `token` | 토큰 사용자가 소유한 저장소. `apiUrl`은 GitHub와 동일. organization 지정 불가 |
 | `bitbucket-cloud` | `workspace`, `project` 또는 `projects` | workspace 식별자와 정확한 프로젝트 키 |
 | `bitbucket-server` | `baseUrl`, `project` 또는 `projects` | HTTPS 서버 주소. context path 포함 가능 |
 | `git` | `repositories` | 비어 있지 않은 name·url 객체 배열 |
@@ -61,8 +63,11 @@ GitHub·Bitbucket Server PAT 예제는 username 없이 token만 지정합니다.
 batch는 프로젝트 키를 미리 지정해야 합니다. `projects`는 Bitbucket에만 사용할 수 있으며 `project`와 동시에 지정하지 않습니다.
 키 목록의 빈 값·중복은 오류입니다. 단일 project와 projects 목록은 저장 경로가 다릅니다.
 
-GitHub는 조직 저장소를 조회합니다. 개인 계정 저장소 자동 조회나 GitHub Projects 보드는 지원하지 않습니다.
-개인 저장소는 직접 URL로 지정하세요.
+`github`는 조직 저장소, `github-user`는 인증된 사용자 본인 소유 저장소를 조회합니다.
+개인 모드는 공개·비공개 여부와 관계없이 토큰으로 조회 가능한 항목만 표시하며 조직·다른 소유자의 협업 저장소는 제외합니다.
+GitHub Projects 보드는 지원하지 않습니다. TUI는 `/user`로 계정명을 확인해 폴더 이름으로 사용하고,
+batch는 다른 provider처럼 source.name을 폴더 이름으로 사용합니다.
+개인 batch 예제는 [batch.github-user.json](../examples/batch.github-user.json)을 참고하세요.
 
 ## 직접 URL
 

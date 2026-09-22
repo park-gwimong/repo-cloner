@@ -37,6 +37,7 @@ Admin이나 Write를 선택해도 Read가 자동으로 포함되지 않습니다
 | Duplicate project folder / Invalid folder name | 같은 표시 이름의 프로젝트를 분리해서 실행하거나 이름 수정. batch는 source.name으로 경로를 직접 구분 가능 |
 | 화면이 작아 조작할 수 없음 | 터미널을 61열 × 12행 이상으로 확대 후 키 입력 |
 | Git was not found in PATH | Git 설치 후 새 터미널에서 git --version 확인 |
+| GitHub 개인 계정을 조직으로 조회해 404 발생 | GitHub 메뉴에서 Personal account 선택. Organization은 실제 조직 식별자만 입력 |
 | Permission denied (publickey) | 해당 서비스에 등록된 SSH 키와 SSH agent 설정 확인 |
 | Host key verification failed | 서비스가 공개한 지문과 비교하여 로컬 SSH known_hosts 설정 확인 |
 
@@ -44,3 +45,25 @@ Admin이나 Write를 선택해도 Read가 자동으로 포함되지 않습니다
 username, token, 인증 헤더, 개인 키는 포함하지 마세요.
 
 [README로 돌아가기](../README.md)
+
+## SSH 호스트 확인에서 멈춘 것처럼 보일 때
+
+`Are you sure you want to continue connecting (yes/no/[fingerprint])?`는 GitHub 서버의 SSH 호스트 키를
+아직 신뢰 목록에 등록하지 않아 SSH가 답변을 기다리는 상태입니다. API 토큰 인증과는 별개입니다.
+TUI 실행에서는 이 질문을 기다리지 않고 해당 저장소를 실패로 처리하며 `AUTH / SSH SETUP REQUIRED`를 표시합니다.
+기존 batch/-i에서는 Git의 질문이 그대로 나타날 수 있습니다.
+
+같은 실행 계정과 Git이 사용하는 SSH 환경에서 별도로 다음 명령으로 확인하세요.
+
+```bash
+ssh -T git@github.com
+```
+
+표시된 지문을 [GitHub 공식 호스트 키 지문](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)과
+비교하고 일치할 때 승인합니다. 정상 인증 뒤에도 GitHub의 이 테스트 명령은 셸 접근을 제공하지 않으므로 종료 코드 1일 수 있습니다.
+설명은 [공식 SSH 연결 테스트](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/testing-your-ssh-connection)를 참고하세요.
+Windows에서는 Git 내장 SSH와 Windows OpenSSH가 다를 수 있으므로 Git의 core.sshCommand, GIT_SSH_COMMAND 및 SSH 경로를 확인하세요.
+암호화된 개인 키는 실행 전에 SSH agent에 준비하고 HTTPS는 Git Credential Manager에서 인증을 준비하세요.
+
+10초 이상 출력이 없는 경우 대시보드는 마지막 출력 이후 시간을 표시합니다. 출력이 없다는 이유만으로
+인증 대기라고 단정하지 않습니다. 네트워크·서버·사용자 정의 credential helper 지연도 가능하며 Q로 중단할 수 있습니다.
