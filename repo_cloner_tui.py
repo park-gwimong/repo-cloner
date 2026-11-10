@@ -245,7 +245,7 @@ class TerminalUI:
                 if ancestor.exists() and not ancestor.is_dir():
                     raise ValueError("Destination or its parent is a file, not a directory.")
 
-        initial = destination.expanduser().absolute() if destination is not None else config_path.resolve().parent / "clones"
+        initial = destination.expanduser().absolute() if destination is not None else Path(os.path.abspath(config_path)).parent / "clones"
         root = self.edit("Destination directory (relative paths use current directory)", str(initial), destination_path)
         root = str(Path(root).expanduser().absolute())
         protocol = ["ssh", "https"][self.choose("Clone protocol", ["SSH", "HTTPS"])]

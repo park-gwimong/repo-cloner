@@ -1105,7 +1105,7 @@ def _offer_batch_save(ui, config_path: Path, root: Path, protocol: str,
     except ClonerError as exc:
         print(f"Batch file cannot be saved: {exc}", file=sys.stderr, flush=True)
         return
-    save(export, config_path.resolve().parent / "batch.json")
+    save(export, Path(os.path.abspath(config_path)).parent / "batch.json")
 
 
 _STATUS_STATES = ("ok", "behind", "ahead", "diverged", "missing", "skip", "warn", "partial", "extra", "error")
@@ -1456,7 +1456,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
     if default_credentials is not None and (
             not isinstance(default_credentials, str) or not default_credentials.strip()):
         raise ClonerError("credentials must be a nonempty path string")
-    base_dir = config_path.resolve().parent
+    base_dir = Path(os.path.abspath(config_path)).parent
     credential_cache: dict = {}
     names = set()
     expanded = []
@@ -1484,7 +1484,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
             raise ClonerError("destination must be a nonempty path string")
         root = Path(configured).expanduser()
         if not root.is_absolute():
-            root = config_path.resolve().parent / root
+            root = Path(os.path.abspath(config_path)).parent / root
         root = Path(os.path.abspath(root))
     if not dry_run and not shutil.which("git"):
         raise ClonerError("Git was not found in PATH. Install Git first.")
