@@ -355,6 +355,25 @@ class ExistingUpdateTests(unittest.TestCase):
         self.assertFalse((self.fixture.root / "unused").exists())
         self.assertIn("cloned=1 updated=1 unchanged=0 skipped=1 planned=0 failed=0", self.output.getvalue())
 
+    def test_update_through_linked_parent_folder(self):
+        # Parent folders may be links (macOS /var -> /private/var, Windows junctions).
+        link = self.fixture.root.parent / "linked parent"
+        if os.name == "nt":
+            subprocess.run(["cmd", "/d", "/c", "mklink", "/J", str(link), str(self.fixture.root)],
+                           check=True, capture_output=True)
+        else:
+            os.symlink(self.fixture.root, link)
+        try:
+            self.fixture.push_change("two\n")
+            with patch.object(app, "_remote_identity", side_effect=self.local_identity):
+                self.assertEqual(app.clone(self.repo(), link, False), "updated")
+            self.assertEqual(self.fixture.target_head(), self.fixture.remote_head())
+        finally:
+            if os.name == "nt":
+                os.rmdir(link)
+            else:
+                os.unlink(link)
+
     def test_same_tip_is_unchanged(self):
         head = self.fixture.target_head()
         self.assertEqual(self.update(), "unchanged")

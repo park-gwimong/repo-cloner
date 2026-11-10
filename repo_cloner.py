@@ -503,7 +503,9 @@ def _snapshot(target: Path, expected_url: str, hooks_path: Path) -> _UpdateSnaps
     top = _single_line(_git_required(target_abs, ["rev-parse", "--show-toplevel"], hooks_path))
     if top is None:
         raise ClonerError("Git did not return the worktree root")
-    if _normalize_path(top) != _normalize_path(target_abs):
+    # Git reports the resolved path, so resolve links in parent folders on both
+    # sides (e.g. macOS /var -> /private/var). The target itself is never a link.
+    if _normalize_path(os.path.realpath(top)) != _normalize_path(os.path.realpath(target_abs)):
         raise _SkipUpdate("directory is inside another Git worktree")
     branch_ref = _single_line(
         _git_optional(
