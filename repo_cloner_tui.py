@@ -337,6 +337,42 @@ class TerminalUI:
                     self.offset = min(max(len(label) for label in labels) - 1, self.offset + 10)
                 cursor = self.move(key, cursor, len(labels), page)
 
+    def save_batch(self, export, default_path):
+        """Offer to save the selection as a batch file; skipping never stops the run."""
+        from repo_cloner import ClonerError, write_batch
+
+        def batch_path(value):
+            if any(ord(char) < 32 for char in value):
+                raise ValueError("Path contains a control character.")
+            path = Path(value).expanduser().absolute()
+            if path.is_dir():
+                raise ValueError("Path is a directory; enter a JSON file path.")
+            for ancestor in path.parents:
+                if ancestor.exists() and not ancestor.is_dir():
+                    raise ValueError("A parent of the path is a file, not a directory.")
+
+        try:
+            if self.choose("Save this selection as a batch file for other PCs?",
+                           ["Continue without saving", "Save batch file (no tokens are written)"]) == 0:
+                return None
+            path = Path(self.edit("Batch file path (relative paths use current directory)",
+                                  str(default_path), batch_path)).expanduser().absolute()
+            if path.exists() and self.choose(f"{path.name} already exists",
+                                             ["Keep existing file", "Overwrite"]) == 0:
+                print("Batch file not saved.", flush=True)
+                return None
+        except KeyboardInterrupt:
+            print("Batch file not saved.", flush=True)
+            return None
+        try:
+            write_batch(path, export)
+        except (ClonerError, OSError) as exc:
+            print(f"Batch file not saved: {exc}", file=sys.stderr, flush=True)
+            return None
+        print(f"Saved batch file: {path}", flush=True)
+        print(f'Run it on another PC: repo-cloner --batch --config "{path}"', flush=True)
+        return path
+
     def confirm(self, labels, *, dry_run=False):
         cursor = 0
         self.offset = 0

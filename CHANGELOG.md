@@ -7,6 +7,8 @@
 
 ### 추가
 
+- TUI 선택을 batch 파일로 저장. 토큰 대신 인증 파일 경로를 기록하고, TUI와 같은 폴더 구조를 재현.
+- batch `credentials` 필드: 최상위 또는 source별로 username·token 인증 파일을 참조.
 - TUI 실행 대시보드: 전체 진행률, 현재 저장소·경과 시간, Git 로그, 결과 집계 및 프로세스 트리 취소.
 - TUI의 Git/SSH 입력 대기를 비활성화하고 인증·호스트 키 확인 실패를 별도로 안내.
 - GitHub 개인 계정 모드: 토큰으로 계정명 자동 확인, 본인 소유 공개·비공개 저장소 조회 및 선택. batch provider는 github-user.

@@ -19,7 +19,8 @@ batch는 JSON에 지정한 source·프로젝트·저장소를 **화면 선택이
 
 TUI의 `repositories.json`은 username·token만 담습니다. batch에는 **전체 작업 설정**이 필요하므로
 `--config batch.json`을 명시하세요. `--batch`만 붙여도 기본 파일명이 batch.json으로 바뀌지는 않습니다.
-두 파일을 합치거나 한 파일의 인증 정보를 다른 파일에서 자동으로 가져오지 않습니다.
+두 파일을 자동으로 합치지는 않지만, batch에 `"credentials": "./repositories.json"`을 쓰면 인증은 그 파일에서 읽습니다.
+TUI에서 고른 구성을 batch 파일로 저장하는 방법은 [README](../README.md#여러-pc에서-같은-구성-만들기)를 보세요.
 
 가장 간단한 예제는 API 인증이 필요 없는 직접 URL 방식입니다.
 
@@ -97,12 +98,13 @@ batch에서도 프로젝트명 바로 아래에 저장하려면 **프로젝트�
       "provider": "bitbucket-cloud",
       "workspace": "YOUR_WORKSPACE",
       "project": "CONTROL",
-      "username": "you@example.com",
-      "token": "YOUR_TOKEN"
+      "credentials": "./repositories.json"
     }
   ]
 }
 ```
+
+`credentials`는 username·token만 담은 인증 파일 경로입니다. 대신 source에 `username`·`token`을 직접 넣어도 됩니다.
 
 ```text
 clones/
@@ -138,7 +140,7 @@ Windows JSON 경로는 `D:/GitCopies`처럼 슬래시를 사용하면 편합니�
 
 이 예제는 `clones/company/APP/<repo>`와 `clones/company/OPS/<repo>`에 저장합니다.
 `project`와 `projects`는 동시에 사용할 수 없으며 `projects`는 비어 있지 않은 고유한 키 목록이어야 합니다.
-여러 source를 배열에 추가하면 다른 계정·서비스도 한 번에 처리합니다. API 인증은 source마다 지정합니다.
+여러 source를 배열에 추가하면 다른 계정·서비스도 한 번에 처리합니다. API 인증은 최상위 `credentials`로 한 번에 지정하거나 source마다 지정합니다.
 
 필터는 API 조회 **후** 저장소 이름에 적용합니다. 대소문자를 구분하는 glob이며 `*`, `?`, `[abc]`를 지원합니다.
 include가 없거나 `[]`이면 전체가 후보입니다. include에 일치해도 exclude에 일치하면 제외됩니다.

@@ -899,6 +899,159 @@ def clone(repo: Repository, parent: Path, dry_run: bool) -> str:
     return "cloned"
 
 
+_CREDENTIAL_KEYS = frozenset({"username", "token"})
+
+
+def _load_credentials(reference: str, base_dir: Path, cache: dict) -> dict:
+    """Read a username/token JSON file; relative paths use the batch file folder."""
+    path = Path(reference).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    path = Path(os.path.abspath(path))
+    key = _normalize_path(path)
+    if key not in cache:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except OSError as exc:
+            raise ClonerError(f"Cannot read credentials file {path} ({type(exc).__name__})") from None
+        except ValueError:
+            raise ClonerError(f"Credentials file is not valid JSON: {path}") from None
+        if not isinstance(data, dict) or set(data) - _CREDENTIAL_KEYS:
+            raise ClonerError(f"Credentials file must contain only username and token: {path}")
+        cache[key] = data
+    return cache[key]
+
+
+def _with_credentials(source: dict, default: str | None, base_dir: Path, cache: dict) -> dict:
+    """Merge a referenced credentials file into one source, like TUI does.
+
+    The token is used by every API provider; username only by Bitbucket Cloud.
+    A source's own credentials or inline token/username replace the default.
+    """
+    reference = source.get("credentials")
+    inline = any(key in source for key in _CREDENTIAL_KEYS)
+    if reference is not None and inline:
+        raise ClonerError("Use either credentials or inline token/username in a source, not both")
+    if reference is None:
+        if inline or default is None:
+            return source
+        reference = default
+    if not isinstance(reference, str) or not reference.strip():
+        raise ClonerError("credentials must be a nonempty path string")
+    resolved = {key: value for key, value in source.items() if key != "credentials"}
+    provider = source.get("provider")
+    if provider == "git":
+        return resolved
+    values = _load_credentials(reference, base_dir, cache)
+    if "token" in values:
+        resolved["token"] = values["token"]
+    if provider == "bitbucket-cloud" and "username" in values:
+        resolved["username"] = values["username"]
+    return resolved
+
+
+def _portable_path(path: Path, base: Path) -> str:
+    """Prefer a path that also works on other PCs: relative, then ~/, then absolute."""
+    path = Path(os.path.abspath(path))
+    try:
+        relative = path.relative_to(base)
+        return "./" + relative.as_posix() if relative.parts else "."
+    except ValueError:
+        pass
+    try:
+        return "~/" + path.relative_to(Path.home()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _literal_pattern(name: str) -> str:
+    """Escape glob characters so an include pattern matches one exact name."""
+    return re.sub(r"([*?\[])", r"[\1]", name)
+
+
+@dataclass(frozen=True)
+class BatchExport:
+    """A TUI selection that can be written as a batch file without secrets."""
+    destination: Path
+    protocol: str
+    credentials: Path | None
+    sources: tuple[dict, ...]
+
+    def document(self, batch_path: Path) -> dict:
+        base = Path(os.path.abspath(batch_path)).parent
+        document = {}
+        if self.credentials is not None:
+            document["credentials"] = _portable_path(self.credentials, base)
+        document["destination"] = _portable_path(self.destination, base)
+        document["protocol"] = self.protocol
+        document["sources"] = [dict(source) for source in self.sources]
+        return document
+
+
+_EXPORT_OMIT = frozenset({
+    "name", "provider", "credentials", "projects", "include", "exclude", "repositories",
+}) | _CREDENTIAL_KEYS
+
+
+def batch_export(root: Path, protocol: str, credentials: Path | None,
+                 expanded: list, tasks: list, origins: list[int]) -> BatchExport:
+    """Pin the selected repositories so batch reproduces the same paths."""
+    groups: dict[int, list[Repository]] = {}
+    for (repo, _parent, _label), origin in zip(tasks, origins):
+        groups.setdefault(origin, []).append(repo)
+    sources = []
+    names = set()
+    uses_api = False
+    for origin, repos in groups.items():
+        source, parts = expanded[origin]
+        if len(parts) != 1:
+            raise ClonerError(f"{'/'.join(parts)} cannot be saved as one batch source")
+        name = parts[0]
+        if name.casefold() in names:
+            raise ClonerError(f"Two selected sources use the folder {name!r}; batch source names must be unique")
+        names.add(name.casefold())
+        provider = source["provider"]
+        entry = {"name": name, "provider": provider}
+        entry.update((key, value) for key, value in source.items() if key not in _EXPORT_OMIT)
+        if provider == "git":
+            entry["repositories"] = [{"name": repo.name, "url": repo.url} for repo in repos]
+        else:
+            uses_api = True
+            entry["include"] = [_literal_pattern(repo.name) for repo in repos]
+        sources.append(entry)
+    return BatchExport(Path(os.path.abspath(root)), protocol,
+                       Path(os.path.abspath(credentials)) if uses_api and credentials else None,
+                       tuple(sources))
+
+
+def write_batch(path: Path, export: BatchExport) -> Path:
+    """Write the batch file atomically so an existing file is never half-written."""
+    path = Path(os.path.abspath(Path(path).expanduser()))
+    text = json.dumps(export.document(path), indent=2, ensure_ascii=False) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    return path
+
+
+def _offer_batch_save(ui, config_path: Path, root: Path, protocol: str,
+                      expanded: list, tasks: list, origins: list[int]) -> None:
+    save = getattr(ui, "save_batch", None)
+    if save is None:
+        return
+    try:
+        export = batch_export(root, protocol, config_path, expanded, tasks, origins)
+    except ClonerError as exc:
+        print(f"Batch file cannot be saved: {exc}", file=sys.stderr, flush=True)
+        return
+    save(export, config_path.resolve().parent / "batch.json")
+
+
 def _patterns(source: dict, key: str) -> list[str]:
     value = source.get(key, [])
     if not isinstance(value, list) or any(
@@ -1123,11 +1276,20 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
     sources = config.get("sources")
     if not isinstance(sources, list) or not sources:
         raise ClonerError("sources must be a nonempty list")
+    default_credentials = config.get("credentials")
+    if default_credentials is not None and (
+            not isinstance(default_credentials, str) or not default_credentials.strip()):
+        raise ClonerError("credentials must be a nonempty path string")
+    base_dir = config_path.resolve().parent
+    credential_cache: dict = {}
     names = set()
     expanded = []
+    resolved_sources = []
     for source in sources:
         if not isinstance(source, dict):
             raise ClonerError("Each source must be an object")
+        source = _with_credentials(source, default_credentials, base_dir, credential_cache)
+        resolved_sources.append(source)
         name = folder_name(required(source, "name"))
         if name.casefold() in names:
             raise ClonerError(f"Duplicate source name: {name}")
@@ -1135,6 +1297,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         _patterns(source, "include")
         _patterns(source, "exclude")
         expanded.extend(_project_sources(source))
+    sources = resolved_sources
     if destination is not None:
         root = Path(os.path.abspath(destination.expanduser()))
     else:
@@ -1152,6 +1315,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
     if interactive:
         expanded, counts["failed"] = _interactive_sources(sources, select, project_folders=ui is not None)
     tasks = []
+    origins = []  # index into expanded for each task, used to save a batch file
     targets = set()
     for index, (source, parts) in enumerate(expanded, 1):
         label = "/".join(parts)
@@ -1180,6 +1344,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
                     raise ClonerError("Duplicate repository destination")
                 targets.add(target_key)
                 tasks.append((repo, parent, label))
+                origins.append(index - 1)
             except (ClonerError, OSError) as exc:
                 print(f"[{label}/{repo.name}] {exc}", file=sys.stderr, flush=True)
                 counts["failed"] += 1
@@ -1188,6 +1353,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
             f"{label}/{repo.name} -> {parent / repo.name}" for repo, parent, label in tasks])
         counts["skipped"] += len(tasks) - len(selected)
         tasks = [tasks[index] for index in selected]
+        origins = [origins[index] for index in selected]
     print(f"Targets: {len(tasks)} repositories", flush=True)
     preview = []
     print("# | Source / Repository | Action | Destination", flush=True)
@@ -1204,6 +1370,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         if not dry_run and not confirmed:
             print("Cancelled. No repositories were changed.", flush=True)
             return 1 if counts["failed"] else 0
+        _offer_batch_save(ui, config_path, root, protocol, expanded, tasks, origins)
     elif interactive and tasks and not dry_run:
         try:
             answer = input(f"Execute {len(tasks)} selected repositories? [y/N]: ").strip().lower()

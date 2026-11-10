@@ -7,10 +7,10 @@
 | 구분 | TUI (기본) | batch / 번호 입력 모드 |
 | --- | --- | --- |
 | 권장 파일 | repositories.json | batch.json |
-| 최상위 필드 | username, token만 허용 | destination, protocol, sources |
-| 인증 위치 | 최상위 | sources의 각 항목 |
+| 최상위 필드 | username, token만 허용 | credentials, destination, protocol, sources |
+| 인증 위치 | 최상위 | 참조한 인증 파일 또는 sources의 각 항목 |
 | 작업 대상·경로 | TUI에서 입력·선택 | 파일에서 읽음 |
-| 자동 저장·파일 병합 | 없음 | 없음 |
+| 저장·파일 병합 | 선택하면 batch 파일로 저장 | `credentials`로 지정한 인증 파일만 읽음 |
 
 JSON 파일은 UTF-8이며 BOM이 있어도 읽습니다. 주석과 trailing comma는 허용하지 않습니다.
 알 수 없는 전체 설정 필드가 모두 엄격하게 거절되는 것은 아닙니다. 아래 문서화된 필드만 사용하세요.
@@ -29,6 +29,7 @@ token만 있으면 Bearer 인증, `{}`는 익명 조회·직접 URL 용도입니
 
 | 필드 | 형식 / 기본값 | 설명 |
 | --- | --- | --- |
+| `credentials` | 문자열 / 없음 | 모든 source의 기본 인증 파일 경로. 설정 파일 기준 상대 경로, `~` 지원 |
 | `destination` | 문자열 / `./clones` | 설정 파일 기준 저장 루트. CLI --destination이 우선 |
 | `protocol` | `ssh` 또는 `https` / `ssh` | API provider의 clone URL 형식 |
 | `sources` | 비어 있지 않은 객체 배열 / 필수 | 순서대로 실행할 연결 및 대상 |
@@ -41,6 +42,7 @@ token만 있으면 Bearer 인증, `{}`는 익명 조회·직접 URL 용도입니
 | `provider` | 필수 문자열 | github, github-user, bitbucket-cloud, bitbucket-server, git |
 | `include` | 문자열 배열 / `[]` | 저장소 이름 glob. 빈 목록이면 전체 후보 |
 | `exclude` | 문자열 배열 / `[]` | 저장소 이름 glob. include보다 우선 |
+| `credentials` | 선택 문자열 | 이 source만 쓸 인증 파일 경로. 최상위 credentials보다 우선 |
 | `token` | 선택 문자열 | 실제 API 토큰. 환경변수 이름이 아님 |
 | `username` | 선택 문자열 | token과 함께 있으면 Basic 인증. token 없이 단독 사용 불가 |
 
@@ -48,6 +50,29 @@ batch의 기존 API provider는 두 인증 필드가 있으면 Basic, token만 �
 `github-user`는 token이 필수이며 username 유무와 관계없이 Bearer 인증을 사용합니다.
 GitHub·Bitbucket Server PAT 예제는 username 없이 token만 지정합니다. 직접 URL provider는 API 인증을 사용하지 않습니다.
 `tokenEnv`, `usernameEnv`, `.env` 기반 API 인증은 지원하지 않습니다.
+
+## 인증 파일 참조 (`credentials`)
+
+batch 파일에 토큰을 넣지 않으려면 TUI와 같은 형식(username·token만 있는 JSON)의 파일을 참조합니다.
+
+```json
+{
+  "credentials": "./repositories.json",
+  "destination": "./clones",
+  "sources": [
+    {"name": "관제 시스템", "provider": "bitbucket-cloud", "workspace": "YOUR_WORKSPACE", "project": "CONTROL"},
+    {"name": "my-org", "provider": "github", "organization": "YOUR_ORGANIZATION", "credentials": "~/secrets/github.json"}
+  ]
+}
+```
+
+- 참조한 파일의 값은 TUI와 같은 규칙으로 적용합니다. token은 모든 API provider에, username은 Bitbucket Cloud에만 사용합니다.
+- 우선순위: source의 `token`/`username` 직접 지정 또는 source `credentials` → 최상위 `credentials`.
+- 한 source에 `credentials`와 `token`/`username`을 함께 쓰면 오류입니다. `git` provider는 인증 파일을 읽지 않습니다.
+- 파일이 없거나 username·token 외의 필드가 있으면 시작 단계에서 중단합니다. 오류 메시지에 인증 값은 표시하지 않습니다.
+
+TUI 확인 화면 다음에 `Save batch file`을 선택하면 이 형식의 batch 파일을 자동으로 만듭니다.
+선택한 저장소는 `include`(API) 또는 `repositories`(직접 URL)로 고정되며, include 이름의 `*`, `?`, `[`는 glob이 아닌 문자로 처리되도록 `[*]`처럼 기록합니다.
 
 ## Provider별 필드
 
@@ -109,5 +134,5 @@ batch는 workspace 목록을 조회하지 않으므로 이 기능을 위해 work
 API 토큰의 권한과 계정 자체의 접근 권한을 모두 충족해야 합니다.
 Git clone/update 인증은 SSH 키·로컬 Git 자격 증명으로 별도 처리합니다.
 
-루트 repositories.json·batch.json은 Git 제외 대상입니다. 다른 경로·이름의 개인 설정은 직접 제외하고 파일 접근 권한도 관리하세요.
+루트 repositories.json·batch.json은 Git 제외 대상입니다. 인증을 참조로만 둔 batch 파일은 공유해도 되지만 참조된 인증 파일은 공유하지 마세요. 다른 경로·이름의 개인 설정은 직접 제외하고 파일 접근 권한도 관리하세요.
 API는 HTTPS만 허용하고 리다이렉트를 따르지 않습니다. 인증서를 우회하는 옵션은 없습니다.

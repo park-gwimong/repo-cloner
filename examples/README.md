@@ -11,6 +11,7 @@
 | [batch.github-user.json](batch.github-user.json) | batch / -i | 토큰 소유자의 개인 저장소. name을 원하는 계정 폴더명으로 수정 |
 | [batch.bitbucket-cloud.json](batch.bitbucket-cloud.json) | batch / -i | Cloud workspace의 여러 프로젝트 |
 | [batch.bitbucket-server.json](batch.bitbucket-server.json) | batch / -i | Server / Data Center 단일 프로젝트 |
+| [batch.shared-credentials.json](batch.shared-credentials.json) | batch / -i | 토큰 없이 인증 파일을 참조. Bitbucket은 repositories.json, GitHub는 github.json(token만) 사용. 여러 PC 공유용 |
 | [batch.all-providers.json](batch.all-providers.json) | batch / -i | 전체 필드 참고. 필요한 source만 남길 것 |
 
 batch 예제는 `batch.json`으로 복사한 뒤 서비스·프로젝트 키·인증 값을 수정합니다.
@@ -29,6 +30,6 @@ python3 repo_cloner.py --batch --config batch.json --dry-run
 ```
 
 루트의 `repositories.json`과 `batch.json`은 Git 제외 대상입니다. 다른 이름의 개인 설정 파일은
-직접 Git 제외 처리해야 합니다. 이 도구는 인증 파일과 batch 파일을 자동 병합하지 않습니다.
+직접 Git 제외 처리해야 합니다. batch 파일은 `credentials` 필드로 지정한 인증 파일만 읽습니다.
 
 [batch 사용법](../docs/BATCH.md) · [설정 항목](../docs/CONFIGURATION.md)

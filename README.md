@@ -17,6 +17,7 @@ Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 �
 - [빠른 시작](#빠른-시작)
 - [실행 모드 비교](#실행-모드-비교)
 - [TUI 실행 흐름](#tui-실행-흐름)
+- [여러 PC에서 같은 구성 만들기](#여러-pc에서-같은-구성-만들기)
 - [Batch 모드](#batch-모드)
 - [인증](#인증)
 - [실행 옵션](#실행-옵션)
@@ -31,6 +32,7 @@ Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 �
 - GitHub 개인 계정·Organization, Bitbucket Cloud, Bitbucket Server / Data Center 및 직접 Git URL 지원
 - 키보드 TUI의 workspace → 프로젝트 → 저장소 선택과 저장 경로 편집
 - 여러 source·프로젝트를 처리하는 batch 및 include/exclude 이름 필터
+- TUI 선택을 토큰 없는 batch 파일로 저장해 다른 PC에서 같은 구성 재현
 - 실행 대상과 경로 미리 보기, 저장소 단위 진행률 및 결과 집계
 - 기존 작업 트리를 검사하고 현재 upstream만 fast-forward하는 갱신 정책
 - Python 표준 라이브러리 기반 구현, Windows/macOS/Linux CI 구성
@@ -115,7 +117,7 @@ repo-cloner
 | 번호 입력 | `python repo_cloner.py -i --config batch.json` | 전체 source 설정 | 번호 선택 후 y로 실행, Enter는 취소 | 단순 콘솔에서 선택 실행 |
 
 세 모드 모두 `--dry-run`을 지원합니다. `--batch`, `-i`, `--tui`는 동시에 지정할 수 없습니다.
-API 인증 전용 파일과 전체 설정 파일은 자동 병합되지 않습니다.
+전체 설정 파일은 `"credentials"` 필드로 인증 전용 파일을 참조할 수 있습니다. 지정하지 않으면 두 파일을 합치지 않습니다.
 
 ## TUI 실행 흐름
 
@@ -125,6 +127,7 @@ API 인증 전용 파일과 전체 설정 파일은 자동 병합되지 않습�
 4. **연결 추가**: 필요하면 다른 서비스 연결이나 직접 Git URL을 추가합니다. 별도의 source 폴더 이름은 입력하지 않습니다. 프로젝트 정보가 없는 직접 Git URL은 묶어서 저장할 프로젝트명을 입력합니다.
 5. **프로젝트·저장소 선택**: 접근 가능한 목록을 조회하고 여러 항목을 선택합니다.
 6. **대상 확인**: 작업 종류와 최종 저장 경로를 검토한 뒤 `Enter` 또는 `Y`로 실행합니다. `N`, `Esc`, `Q`는 실행을 취소합니다.
+7. **batch 파일 저장 (선택)**: 이번 선택을 batch 파일로 저장할지 묻습니다. 기본값(`Enter`)은 저장하지 않고 계속하며, 저장 여부와 관계없이 실행은 진행됩니다. 자세한 내용은 [여러 PC에서 같은 구성 만들기](#여러-pc에서-같은-구성-만들기)를 보세요.
 
 Bitbucket 프로젝트는 `<저장 경로>/<프로젝트명>/<저장소 이름>`에 저장됩니다.
 폴더명은 API에서 조회한 프로젝트 표시 이름이며 프로젝트 키는 조회에만 사용합니다.
@@ -178,6 +181,27 @@ GitHub API URL은 기본값 `https://api.github.com`을 사용하세요. Enterpr
 공식 [인증 사용자 저장소 API](https://docs.github.com/en/rest/repos/repos#list-repositories-for-the-authenticated-user)의
 `affiliation=owner`로 조회합니다. GitHub Projects 보드는 지원하지 않습니다.
 
+## 여러 PC에서 같은 구성 만들기
+
+TUI에서 한 번 고른 저장소 구성을 **토큰 없는 batch 파일**로 저장하고, 다른 PC에서는 그 파일로 batch를 실행합니다.
+
+1. 첫 PC에서 TUI로 저장소를 선택하고 확인 화면 다음의 `Save batch file`을 고릅니다.
+   기본 저장 위치는 인증 파일 옆의 `batch.json`입니다. `--dry-run`으로 실행해도 저장할 수 있습니다.
+2. 저장된 파일에는 선택한 저장소 이름이 고정되고, 인증 값 대신 인증 파일 경로가 `"credentials": "./repositories.json"`처럼 기록됩니다.
+3. 다른 PC에는 같은 이름의 인증 파일을 각자 만들고, batch 파일을 복사하거나 dotfiles 등 Git 저장소로 공유합니다.
+4. 다른 PC에서 실행합니다.
+
+```bash
+python repo_cloner.py --batch --config batch.json --dry-run
+python repo_cloner.py --batch --config batch.json
+```
+
+저장된 batch는 TUI와 **같은 폴더 구조**(`<저장 경로>/<프로젝트명 또는 계정·조직명>/<저장소>`)를 만듭니다.
+저장 경로와 인증 파일 경로는 batch 파일 기준 상대 경로(`./...`), 홈 폴더 아래면 `~/...`로 기록하므로
+운영체제가 달라도 그대로 사용할 수 있습니다. 둘 다 아니면 절대 경로로 기록하니 필요하면 직접 수정하세요.
+API source는 선택한 저장소만 `include`에 정확한 이름으로 기록합니다. 나중에 원격에 추가된 저장소는 자동으로 포함되지 않습니다.
+batch 파일 기본 이름은 Git 제외 대상입니다. 공유용 저장소에 올릴 때도 인증 파일은 올리지 마세요.
+
 ## Batch 모드
 
 batch는 JSON에 지정한 저장소를 **확인 입력 없이 순서대로 clone/update**합니다.
@@ -206,7 +230,7 @@ python repo_cloner.py --batch --config batch.json
 ```
 
 첫 명령은 미리 보기이고 두 번째는 실제 실행입니다. 위 예제의 결과는 `clones/personal/repo-cloner`입니다.
-API provider를 사용하면 해당 source에 workspace·조직·프로젝트 키와 인증 정보를 추가합니다.
+API provider를 사용하면 해당 source에 workspace·조직·프로젝트 키를 추가하고, 인증은 `"credentials": "./repositories.json"`처럼 인증 파일을 참조하거나 source에 직접 넣습니다.
 `--batch`만 지정해도 파일명이 batch.json으로 바뀌지 않으므로 `--config`를 명시하세요.
 
 ### 저장 경로 규칙
@@ -241,6 +265,7 @@ batch는 앱의 입력을 생략하지만 Git/SSH 인증 프롬프트까지 없�
 - Bearer 인증만 필요하면 `username`을 생략할 수 있습니다. 익명 조회나 직접 URL만 사용하면 `{}`도 허용합니다. 항목을 지정한 경우 빈 문자열은 허용하지 않습니다.
 
 이번 실행에 추가한 API source들은 같은 토큰을 사용하므로 해당 서비스에 맞는 인증 파일을 선택하세요.
+batch는 `credentials` 필드로 같은 형식의 인증 파일을 참조할 수 있어 batch 파일에 토큰을 넣지 않아도 됩니다.
 다른 계정은 `--config`로 별도 인증 파일을 지정할 수 있습니다. `.env`·환경변수는 API 인증에 사용하지 않습니다.
 **목록 조회 인증과 Git clone 인증은 별개입니다.** SSH 키 또는 Git Credential Manager 등 로컬 Git 인증을 설정하세요.
 Git URL에는 비밀번호나 토큰을 넣지 않습니다. Bitbucket Cloud 토큰에는 저장소 조회용 `read:repository:bitbucket`과 워크스페이스 선택용 `read:workspace:bitbucket` scope가 필요합니다.
