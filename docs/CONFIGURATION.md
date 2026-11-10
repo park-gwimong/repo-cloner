@@ -77,7 +77,14 @@ batch 파일에 토큰을 넣지 않으려면 TUI와 같은 형식(username·tok
 - 파일이 없거나 username·token 외의 필드가 있으면 시작 단계에서 중단합니다. 오류 메시지에 인증 값은 표시하지 않습니다.
 
 TUI 확인 화면 다음에 `Save batch file`을 선택하면 이 형식의 batch 파일을 자동으로 만듭니다.
-선택한 저장소는 `include`(API) 또는 `repositories`(직접 URL)로 고정되며, include 이름의 `*`, `?`, `[`는 glob이 아닌 문자로 처리되도록 `[*]`처럼 기록합니다.
+저장 범위는 둘 중 하나를 고릅니다.
+
+| 범위 | API source | 직접 URL source |
+| --- | --- | --- |
+| 지금 고른 저장소만 | 고른 이름을 `include`에 고정 | 고른 URL만 `repositories`에 기록 |
+| 프로젝트·계정 전체 | `include` 없음. 나중에 생긴 저장소도 포함 | TUI에서 입력한 URL 전체 기록 |
+
+include 이름의 `*`, `?`, `[`는 glob이 아닌 문자로 처리되도록 `[*]`처럼 기록합니다.
 
 ## Provider별 필드
 

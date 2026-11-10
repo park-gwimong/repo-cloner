@@ -206,6 +206,9 @@ GitHub API URL은 기본값 `https://api.github.com`을 사용하세요. Enterpr
 TUI에서 한 번 고른 저장소 구성을 **토큰 없는 batch 파일**로 저장하고, 다른 PC에서는 그 파일로 batch를 실행합니다.
 
 1. 첫 PC에서 TUI로 저장소를 선택하고 확인 화면 다음의 `Save batch file`을 고릅니다.
+   이어서 저장 범위를 고릅니다.
+   - `Only the repositories selected now`: 지금 고른 저장소만 고정합니다.
+   - `All repositories in these projects/accounts`: 고른 저장소가 속한 프로젝트·조직·계정의 저장소 전체를 대상으로 합니다. 원격에 나중에 생긴 저장소도 자동으로 포함됩니다.
    기본 저장 위치는 인증 파일 옆의 `batch.json`입니다. `--dry-run`으로 실행해도 저장할 수 있습니다.
 2. 저장된 파일에는 선택한 저장소 이름이 고정되고, 인증 값 대신 인증 파일 경로가 `"credentials": "./repositories.json"`처럼 기록됩니다.
 3. 다른 PC에는 같은 이름의 인증 파일을 각자 만들고, batch 파일을 복사하거나 dotfiles 등 Git 저장소로 공유합니다.
@@ -242,7 +245,8 @@ EXTRA는 같은 source 폴더 안만 확인합니다. name 필터로 제외한 �
 저장된 batch는 TUI와 **같은 폴더 구조**(`<저장 경로>/<프로젝트명 또는 계정·조직명>/<저장소>`)를 만듭니다.
 저장 경로와 인증 파일 경로는 batch 파일 기준 상대 경로(`./...`), 홈 폴더 아래면 `~/...`로 기록하므로
 운영체제가 달라도 그대로 사용할 수 있습니다. 둘 다 아니면 절대 경로로 기록하니 필요하면 직접 수정하세요.
-API source는 선택한 저장소만 `include`에 정확한 이름으로 기록합니다. 나중에 원격에 추가된 저장소는 자동으로 포함되지 않습니다.
+`Only the repositories selected now`로 저장하면 API source는 고른 저장소 이름만 `include`에 기록하므로 나중에 원격에 생긴 저장소는 포함되지 않습니다.
+`All repositories ...`로 저장하면 `include` 없이 프로젝트·계정 전체를 조회합니다. 직접 Git URL은 프로젝트 목록이 없으므로 TUI에서 입력한 URL 전체를 기록합니다.
 batch 파일 기본 이름은 Git 제외 대상입니다. 공유용 저장소에 올릴 때도 인증 파일은 올리지 마세요.
 
 ## Batch 모드

@@ -1037,16 +1037,18 @@ class BatchExport:
     destination: Path
     protocol: str
     credentials: Path | None
-    sources: tuple[dict, ...]
+    sources: tuple[dict, ...]             # only the selected repositories
+    whole_sources: tuple[dict, ...] = ()  # every repository in the same projects/accounts
 
-    def document(self, batch_path: Path) -> dict:
+    def document(self, batch_path: Path, whole: bool = False) -> dict:
         base = Path(os.path.abspath(batch_path)).parent
         document = {}
         if self.credentials is not None:
             document["credentials"] = _portable_path(self.credentials, base)
         document["destination"] = _portable_path(self.destination, base)
         document["protocol"] = self.protocol
-        document["sources"] = [dict(source) for source in self.sources]
+        chosen = self.whole_sources if whole else self.sources
+        document["sources"] = [dict(source) for source in chosen]
         return document
 
 
@@ -1057,11 +1059,16 @@ _EXPORT_OMIT = frozenset({
 
 def batch_export(root: Path, protocol: str, credentials: Path | None,
                  expanded: list, tasks: list, origins: list[int]) -> BatchExport:
-    """Pin the selected repositories so batch reproduces the same paths."""
+    """Describe the selection as batch sources that reproduce the same paths.
+
+    ``sources`` pins the selected repositories; ``whole_sources`` keeps the same
+    projects/accounts without a repository list, so later repositories are included.
+    """
     groups: dict[int, list[Repository]] = {}
     for (repo, _parent, _label), origin in zip(tasks, origins):
         groups.setdefault(origin, []).append(repo)
     sources = []
+    whole_sources = []
     names = set()
     uses_api = False
     for origin, repos in groups.items():
@@ -1075,21 +1082,25 @@ def batch_export(root: Path, protocol: str, credentials: Path | None,
         provider = source["provider"]
         entry = {"name": name, "provider": provider}
         entry.update((key, value) for key, value in source.items() if key not in _EXPORT_OMIT)
+        whole = dict(entry)
         if provider == "git":
             entry["repositories"] = [{"name": repo.name, "url": repo.url} for repo in repos]
+            # Direct URLs have no project to list, so "whole" keeps every URL entered.
+            whole["repositories"] = [dict(item) for item in source["repositories"]]
         else:
             uses_api = True
             entry["include"] = [_literal_pattern(repo.name) for repo in repos]
         sources.append(entry)
+        whole_sources.append(whole)
     return BatchExport(Path(os.path.abspath(root)), protocol,
                        Path(os.path.abspath(credentials)) if uses_api and credentials else None,
-                       tuple(sources))
+                       tuple(sources), tuple(whole_sources))
 
 
-def write_batch(path: Path, export: BatchExport) -> Path:
+def write_batch(path: Path, export: BatchExport, whole: bool = False) -> Path:
     """Write the batch file atomically so an existing file is never half-written."""
     path = Path(os.path.abspath(Path(path).expanduser()))
-    text = json.dumps(export.document(path), indent=2, ensure_ascii=False) + "\n"
+    text = json.dumps(export.document(path, whole), indent=2, ensure_ascii=False) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:

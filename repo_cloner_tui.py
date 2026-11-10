@@ -355,6 +355,10 @@ class TerminalUI:
             if self.choose("Save this selection as a batch file for other PCs?",
                            ["Continue without saving", "Save batch file (no tokens are written)"]) == 0:
                 return None
+            whole = self.choose("Which repositories should the batch file include?", [
+                "Only the repositories selected now",
+                "All repositories in these projects/accounts (new ones are added automatically)",
+            ]) == 1
             path = Path(self.edit("Batch file path (relative paths use current directory)",
                                   str(default_path), batch_path)).expanduser().absolute()
             if path.exists() and self.choose(f"{path.name} already exists",
@@ -365,11 +369,12 @@ class TerminalUI:
             print("Batch file not saved.", flush=True)
             return None
         try:
-            write_batch(path, export)
+            write_batch(path, export, whole)
         except (ClonerError, OSError) as exc:
             print(f"Batch file not saved: {exc}", file=sys.stderr, flush=True)
             return None
-        print(f"Saved batch file: {path}", flush=True)
+        scope = "all repositories in the projects/accounts" if whole else "selected repositories only"
+        print(f"Saved batch file ({scope}): {path}", flush=True)
         print(f'Run it on another PC: repo-cloner --batch --config "{path}"', flush=True)
         return path
 

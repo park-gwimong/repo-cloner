@@ -115,12 +115,12 @@ class TuiBatchExportTests(unittest.TestCase):
                 {"name": "two", "url": "https://example.com/two.git"}]},
         ]}
 
-    def tui_run(self, repo_selection, *, save=True, confirm=True, dry_run=True):
+    def tui_run(self, repo_selection, *, save=True, confirm=True, dry_run=True, whole=False):
         ui = Mock()
         ui.select.side_effect = [[0, 1, 2], [0], repo_selection]
         ui.confirm.return_value = confirm
         if save:
-            ui.save_batch.side_effect = lambda export, default: app.write_batch(self.batch, export)
+            ui.save_batch.side_effect = lambda export, default: app.write_batch(self.batch, export, whole)
         planned = []
 
         def clone(repo, parent, dry):
@@ -172,6 +172,29 @@ class TuiBatchExportTests(unittest.TestCase):
         self.assertEqual(seen[0]["token"], SECRET)
         self.assertEqual(seen[0]["username"], "me@example.com")
 
+    def test_whole_project_batch_includes_unselected_and_later_repositories(self):
+        # Only "api" (Bitbucket), "tools" (GitHub) and "two" (direct URL) are selected.
+        code, _, _, _ = self.tui_run([0, 4, 6], whole=True)
+        self.assertEqual(code, 0)
+        text = self.batch.read_text(encoding="utf-8")
+        self.assertNotIn(SECRET, text)
+        self.assertEqual(json.loads(text)["sources"], [
+            {"name": "관제 시스템", "provider": "bitbucket-cloud", "workspace": "w", "project": "CTRL"},
+            {"name": "org", "provider": "github", "organization": "org", "apiUrl": "https://api.github.com"},
+            {"name": "team", "provider": "git", "repositories": [
+                {"name": "one", "url": "https://example.com/one.git"},
+                {"name": "two", "url": "https://example.com/two.git"}]},
+        ])
+        targets = []
+        with patch.object(app, "repositories", side_effect=listing), \
+                patch.object(app, "clone", side_effect=lambda repo, parent, dry: targets.append(
+                    (parent / repo.name).relative_to(self.root / "clones").as_posix()) or "planned"), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(app.run(self.batch, dry_run=True), 0)
+        # Every repository in the same folders TUI used, including ones not selected.
+        self.assertEqual(targets, ["관제 시스템/api", "관제 시스템/web", "관제 시스템/odd[1]",
+                                   "org/service", "org/tools", "team/one", "team/two"])
+
     def test_cancelled_confirmation_does_not_offer_save(self):
         code, ui, planned, _ = self.tui_run([0], confirm=False, dry_run=False)
         self.assertEqual((code, planned), (0, []))
@@ -187,7 +210,8 @@ class TuiBatchExportTests(unittest.TestCase):
 
     def test_export_failure_warns_and_skips_saving(self):
         ui = Mock()
-        with patch.object(app, "batch_export", side_effect=app.ClonerError("boom")),                 redirect_stderr(io.StringIO()) as err:
+        with patch.object(app, "batch_export", side_effect=app.ClonerError("boom")), \
+                redirect_stderr(io.StringIO()) as err:
             app._offer_batch_save(ui, self.credentials, self.root, "ssh", [], [], [])
         ui.save_batch.assert_not_called()
         self.assertIn("Batch file cannot be saved: boom", err.getvalue())
@@ -209,9 +233,11 @@ class SaveBatchScreenTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
-        self.export = app.BatchExport(self.root / "clones", "ssh", None, (
-            {"name": "team", "provider": "git",
-             "repositories": [{"name": "r", "url": "https://example.com/r.git"}]},))
+        selected = {"name": "team", "provider": "git",
+                    "repositories": [{"name": "r", "url": "https://example.com/r.git"}]}
+        whole = {**selected, "repositories": [*selected["repositories"],
+                                              {"name": "s", "url": "https://example.com/s.git"}]}
+        self.export = app.BatchExport(self.root / "clones", "ssh", None, (selected,), (whole,))
 
     def save(self, choices, path=None):
         with patch.object(self.ui, "choose", side_effect=choices), \
@@ -228,20 +254,28 @@ class SaveBatchScreenTests(unittest.TestCase):
 
     def test_save_writes_file_and_prints_next_command(self):
         target = self.root / "new" / "my batch.json"
-        result, edit, out = self.save([1], target)
+        result, edit, out = self.save([1, 0], target)
         self.assertEqual(result, target)
         self.assertEqual(edit.call_args.args[1], str(self.root / "batch.json"))
-        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["destination"],
-                         app._portable_path(self.root / "clones", target.parent))
+        document = json.loads(target.read_text(encoding="utf-8"))
+        self.assertEqual(document["destination"], app._portable_path(self.root / "clones", target.parent))
+        self.assertEqual([r["name"] for r in document["sources"][0]["repositories"]], ["r"])
+        self.assertIn("selected repositories only", out)
         self.assertIn("--batch --config", out)
+
+    def test_whole_scope_writes_every_repository(self):
+        result, _, out = self.save([1, 1])
+        document = json.loads(result.read_text(encoding="utf-8"))
+        self.assertEqual([r["name"] for r in document["sources"][0]["repositories"]], ["r", "s"])
+        self.assertIn("all repositories in the projects/accounts", out)
 
     def test_existing_file_is_kept_unless_overwrite_is_chosen(self):
         target = self.root / "batch.json"
         target.write_text("keep", encoding="utf-8")
-        result, _, _ = self.save([1, 0])
+        result, _, _ = self.save([1, 0, 0])
         self.assertIsNone(result)
         self.assertEqual(target.read_text(encoding="utf-8"), "keep")
-        result, _, _ = self.save([1, 1])
+        result, _, _ = self.save([1, 0, 1])
         self.assertEqual(result, target)
         self.assertIn("sources", target.read_text(encoding="utf-8"))
         self.assertEqual([p.name for p in self.root.iterdir() if p.name.endswith(".tmp")], [])
