@@ -218,11 +218,11 @@ class GitCommandTests(unittest.TestCase):
             app._git(worktree, ["status"], hooks)
         command = run.call_args.args[0]
         self.assertNotIn("-C", command)
-        self.assertEqual(run.call_args.kwargs["cwd"], str(worktree.resolve()))
+        self.assertEqual(run.call_args.kwargs["cwd"], os.path.abspath(worktree))
         self.assertFalse(run.call_args.kwargs["shell"])
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
         self.assertEqual(run.call_args.kwargs["errors"], "surrogateescape")
-        self.assertIn(f"core.hooksPath={hooks.resolve()}", command)
+        self.assertIn(f"core.hooksPath={os.path.abspath(hooks)}", command)
 
 
 def _run_git(cwd: Path, *args: str, env: dict[str, str], check: bool = True):
@@ -886,7 +886,7 @@ class ExistingUpdateTests(unittest.TestCase):
         self.assertEqual(len(hook_paths), 1)
         self.assertIn(" ", next(iter(hook_paths)))
         self.assertTrue(all(path.is_absolute() for target, path, _ in calls))
-        self.assertTrue(all(target == self.fixture.target.resolve() for target, _, _ in calls))
+        self.assertTrue(all(target == Path(os.path.abspath(self.fixture.target)) for target, _, _ in calls))
         self.assertTrue(all("-C" not in args for _, _, args in calls))
         fetches = [args for _, _, args in calls if args and args[0] == "fetch"]
         merges = [args for _, _, args in calls if args and args[0] == "merge"]
