@@ -38,6 +38,20 @@ git diff --check
 문서만 수정했다면 상대 링크·JSON 예제·복사한 예제의 dry-run 명령을 확인하세요.
 CI는 Python 3.10/3.13과 Windows/Linux/macOS에서 전체 테스트, 패키지 설치, 명령 도움말을 검사합니다.
 
+## 릴리스
+
+버전은 `repo_cloner.py`의 `__version__` 한 곳에서 관리합니다. pyproject.toml은 이 값을 읽습니다.
+
+1. `__version__`을 올리고 CHANGELOG.md의 Unreleased 내용을 `## [x.y.z] - YYYY-MM-DD` 아래로 옮깁니다.
+2. main에 병합한 뒤 그 커밋에 태그를 만들고 push합니다.
+
+```bash
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
+```
+
+태그 push 시 CI가 태그와 `__version__`이 같은지 검사합니다. 사용자는 README의 pipx 명령에 태그를 지정해 설치합니다.
+
 ## 코드와 데이터 보호
 
 Python 3.10 문법 및 Windows/POSIX 터미널 동작을 유지하세요. Git 동작 변경은 로컬 수정·커밋 보존을 검증해야 합니다.

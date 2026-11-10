@@ -54,6 +54,5 @@ Git 명령의 안전 조건과 원격 식별 정책은 [SAFETY.md](SAFETY.md)를
 src/ 패키지로 전환하면 import·console entry point·직접 실행·테스트를 함께 변경해야 하므로
 단순 문서 정리를 위한 이동은 하지 않습니다.
 
-루트의 `gjc-install.ps1`은 별도 GJC 도구 설치 스크립트이며 repo-cloner 런타임이나 설치 과정에서 사용하지 않습니다.
 
 [README](../README.md) · [기여 방법](../CONTRIBUTING.md)

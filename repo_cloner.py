@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__version__ = "0.1.0"
+
 import argparse
 import base64
 from contextvars import ContextVar
@@ -1588,7 +1590,8 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="repo-cloner", description=__doc__)
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
         "--config", type=Path, default=Path("repositories.json"),
         help="Credentials JSON for TUI (default: repositories.json); full configuration for --batch/-i",

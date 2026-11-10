@@ -1,12 +1,17 @@
 # 변경 기록
 
-사용자에게 영향을 주는 변경을 기록합니다. 아래 Unreleased 항목은 배포 버전이나 배포 일자를 의미하지 않습니다.
-현재 패키지 메타데이터 버전은 pyproject.toml에서 확인하세요.
+사용자에게 영향을 주는 변경을 기록합니다. 버전은 `repo_cloner.py`의 `__version__`이며 `repo-cloner --version`으로 확인합니다.
+버전별 항목은 같은 이름의 Git 태그(`v0.1.0` 등)에 해당합니다.
 
 ## Unreleased
 
+## [0.1.0] - 2026-11-10
+
+첫 배포 버전입니다.
+
 ### 추가
 
+- `--version` 옵션과 단일 버전 관리, pipx 설치 안내.
 - TUI 선택을 batch 파일로 저장. 토큰 대신 인증 파일 경로를 기록하고, TUI와 같은 폴더 구조를 재현.
 - batch `credentials` 필드: 최상위 또는 source별로 username·token 인증 파일을 참조.
 - `--status` 모드: 설정과 로컬 상태 비교(읽기 전용, fetch 없음). OK/BEHIND/AHEAD/DIVERGED/MISSING/SKIP/WARN/EXTRA/PARTIAL 표시.
@@ -29,6 +34,7 @@
 - TUI 마지막 Enter는 실행, N/Esc/Q는 취소. 번호 입력 모드의 마지막 Enter는 계속 취소.
 - 루트 repositories.example.json은 examples/credentials.json으로 이동.
 - 루트 repositories.batch.example.json은 examples/batch.all-providers.json으로 이동.
+- 프로젝트와 무관한 gjc-install.ps1 제거.
 
 ### 호환성 안내
 

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-repo-cloner"
-version = "0.1.0"
-description = "Clone repositories from GitHub organizations and Bitbucket projects"
+dynamic = ["version"]
+description = "Clone and safely update GitHub and Bitbucket repositories the same way on every PC"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -17,3 +17,6 @@ repo-cloner = "repo_cloner:main"
 
 [tool.setuptools]
 py-modules = ["repo_cloner", "repo_cloner_tui", "repo_cloner_progress"]
+
+[tool.setuptools.dynamic]
+version = {attr = "repo_cloner.__version__"}

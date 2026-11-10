@@ -70,6 +70,23 @@ repo-cloner --help
 ```
 
 PowerShell 활성화: `.venv\Scripts\Activate.ps1`, macOS/Linux 활성화: `source .venv/bin/activate`.
+
+### 여러 PC에 같은 버전 설치 (pipx)
+
+PC마다 저장소를 clone하지 않고 [pipx](https://pipx.pypa.io/)로 명령만 설치할 수 있습니다.
+**버전 태그를 지정하면** 모든 PC가 같은 버전을 사용합니다.
+
+```bash
+pipx install "git+https://github.com/park-gwimong/repo-cloner.git@v0.1.0"
+repo-cloner --version
+# 새 버전으로 바꿀 때 (태그를 바꿔 다시 설치)
+pipx install --force "git+https://github.com/park-gwimong/repo-cloner.git@v0.2.0"
+```
+
+pipx가 없으면 `python -m pip install --user pipx` 후 `python -m pipx ensurepath`를 실행하고 터미널을 다시 여세요.
+태그 없이 설치하면 설치한 시점의 main을 사용하므로 PC마다 버전이 달라질 수 있습니다.
+설치한 명령은 현재 폴더의 `repositories.json`을 기본값으로 읽으므로 설정 파일이 있는 폴더에서 실행하거나 `--config`로 경로를 지정하세요.
+
 macOS/Linux 환경에 따라 `python` 대신 `python3`를 사용하세요.
 가상환경 활성화가 제한된 환경에서는 해당 환경의 Python 실행 파일을 직접 지정해도 됩니다.
 
@@ -312,6 +329,7 @@ Git URL에는 비밀번호나 토큰을 넣지 않습니다. Bitbucket Cloud 토
 | `--batch` | 별도의 전체 source 설정 파일로 확인 입력 없이 일괄 실행 |
 | `--interactive`, `-i` | 별도의 전체 source 설정 파일로 기존 번호 입력 모드 실행 |
 | `--status` | 전체 source 설정과 로컬 폴더 비교. 읽기 전용, fetch 없음 |
+| `--version` | 설치된 버전 출력. PC 간 버전 확인용 |
 | `--help` | 도움말 |
 
 `--tui`, `--batch`, `-i`, `--status`는 함께 사용할 수 없습니다.
@@ -369,7 +387,7 @@ repo-cloner/
 ├── repo_cloner.py               # 진입점, API, 계획, clone/update
 ├── repo_cloner_tui.py           # 키보드 입력, 설정 화면, 선택·확인
 ├── repo_cloner_progress.py      # 실행 대시보드, Git 출력 수집·프로세스 취소
-├── pyproject.toml              # 패키징 및 repo-cloner 명령
+├── pyproject.toml              # 패키징, repo-cloner 명령 (버전은 repo_cloner.__version__)
 ├── examples/                   # 인증 및 provider별 batch 예제
 ├── docs/                       # 사용·설정·안전·구조 문서
 ├── tests/                      # 표준 unittest 테스트
