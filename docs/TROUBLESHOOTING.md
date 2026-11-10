@@ -41,10 +41,50 @@ Admin이나 Write를 선택해도 Read가 자동으로 포함되지 않습니다
 | Permission denied (publickey) | 해당 서비스에 등록된 SSH 키와 SSH agent 설정 확인 |
 | Host key verification failed | 서비스가 공개한 지문과 비교하여 로컬 SSH known_hosts 설정 확인 |
 
+## batch 설정 (credentials · layout · submodules)
+
+| 오류 메시지 | 원인과 해결 |
+| --- | --- |
+| `Cannot read credentials file <경로> (FileNotFoundError)` | 참조한 인증 파일이 없음. 상대 경로는 **batch 파일이 있는 폴더 기준**이므로 위치를 확인하고, 다른 PC라면 그 PC에도 인증 파일을 만듦 |
+| `Credentials file is not valid JSON: <경로>` | 인증 파일의 JSON 문법 오류. 주석·끝 쉼표 제거 |
+| `Credentials file must contain only username and token: <경로>` | 인증 파일에 다른 필드가 있음. 전체 설정 파일(batch)을 인증 파일로 지정하지 않았는지 확인 |
+| `Use either credentials or inline token/username in a source, not both` | 한 source에 `credentials`와 `token`/`username`을 함께 씀. 하나만 남김 |
+| `credentials must be a nonempty path string` | `credentials` 값이 비었거나 문자열이 아님 |
+| `Folder '<이름>' is already used by another source; use distinct names or layout "source"` | `layout: "project"`에서 두 프로젝트·source가 같은 폴더(대소문자 무시)로 모임. 표시 이름을 바꾸거나 기본 layout 사용 |
+| `Project name '<이름>' cannot be used as a folder name; use layout "source"` | 프로젝트 표시 이름에 `/` 등 폴더에 쓸 수 없는 문자가 있음. 기본 layout 사용 |
+| `layout must be source or project` / `submodules must be true or false` | 값의 철자·형식 확인. `submodules`는 따옴표 없는 `true`/`false` |
+| `Submodule update failed; the main repository is unchanged by this step (...)` | 서브모듈 URL 접근 권한(SSH 키·Git 인증)이나 서브모듈 안의 로컬 변경 확인. 본 저장소의 fast-forward는 이미 끝났을 수 있음 |
+
+## TUI에서 batch 파일 저장
+
+| 메시지 | 원인과 해결 |
+| --- | --- |
+| `Batch file cannot be saved: Two selected sources use the folder '<이름>'; ...` | 저장할 source 이름이 겹침. 실행은 계속되며 파일만 저장하지 않음. 겹치지 않게 나눠 실행 |
+| `Batch file not saved: ...` | 저장 위치의 권한이나 디스크 상태 확인. 실행은 계속됨 |
+| 다른 PC에서 GitHub 또는 Bitbucket 인증 실패 | TUI는 한 인증 파일만 쓰므로 저장된 batch의 모든 source가 같은 파일을 가리킴. 서비스별로 `credentials`를 고쳐 다른 파일을 지정 |
+
+## `--status` 결과 해결
+
+| 상태 | 할 일 |
+| --- | --- |
+| `BEHIND` | batch를 실행하면 fast-forward됨 |
+| `AHEAD` | 해당 저장소에서 `git push`. PC를 옮기기 전에 처리 |
+| `DIVERGED` | 해당 저장소에서 직접 rebase 또는 merge 후 push. 이 도구는 자동으로 합치지 않음 |
+| `MISSING` | batch를 실행하면 clone됨 |
+| `SKIP (working tree or index has local changes)` | 변경을 커밋·stash하거나 되돌림 |
+| `SKIP (remote URL does not exactly match ...)` | `git remote -v`로 URL 확인. SSH/HTTPS 형식이나 끝의 `.git` 차이도 다른 주소로 봄. batch의 `protocol`과 맞추거나 `git remote set-url` |
+| `SKIP (HEAD is detached or unborn)` / `SKIP (missing or ambiguous upstream ...)` | 원격 추적 브랜치로 `git switch`하거나 `git branch --set-upstream-to` |
+| `WARN (submodules not initialized ...)` | batch를 실행하거나 `git submodule update --init --recursive` |
+| `WARN (uses Git LFS but git-lfs is not installed ...)` | git-lfs 설치 후 `git lfs install`, 해당 저장소에서 `git lfs pull` |
+| `EXTRA` | 필요한 저장소면 batch 설정에 추가하고, 아니면 직접 정리. 이 도구는 지우지 않음 |
+| `PARTIAL` | 실패한 clone이 남긴 `.clone-*` 임시 폴더. 내용 확인 후 삭제하고 다시 실행 |
+| `ERROR` | 표시된 Git 오류 확인. `git status`가 해당 폴더에서 정상 동작하는지 확인 |
+
+`--status`는 fetch하지 않으므로 BEHIND·AHEAD는 마지막 fetch 기준입니다. 최신 원격과 비교하려면 먼저 batch를 실행하세요.
+
 오류를 보고할 때 OS, Python/Git 버전, 실행 명령, 비밀 값을 지운 설정과 로그를 첨부하세요.
 username, token, 인증 헤더, 개인 키는 포함하지 마세요.
 
-[README로 돌아가기](../README.md)
 
 ## SSH 호스트 확인에서 멈춘 것처럼 보일 때
 
@@ -67,3 +107,5 @@ Windows에서는 Git 내장 SSH와 Windows OpenSSH가 다를 수 있으므로 Gi
 
 10초 이상 출력이 없는 경우 대시보드는 마지막 출력 이후 시간을 표시합니다. 출력이 없다는 이유만으로
 인증 대기라고 단정하지 않습니다. 네트워크·서버·사용자 정의 credential helper 지연도 가능하며 Q로 중단할 수 있습니다.
+
+[README로 돌아가기](../README.md)

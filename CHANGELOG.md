@@ -5,6 +5,11 @@
 
 ## Unreleased
 
+### 변경
+
+- 문제 해결 문서에 credentials·layout·submodules 오류, batch 저장, `--status` 상태별 해결 방법 추가.
+- CI 액션을 Node 24 기반 v7로 올리고 Dependabot으로 액션 버전을 매월 갱신.
+
 ## [0.1.1] - 2026-11-10
 
 ### 수정
