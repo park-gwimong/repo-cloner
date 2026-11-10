@@ -9,6 +9,7 @@
 
 - TUI 선택을 batch 파일로 저장. 토큰 대신 인증 파일 경로를 기록하고, TUI와 같은 폴더 구조를 재현.
 - batch `credentials` 필드: 최상위 또는 source별로 username·token 인증 파일을 참조.
+- batch·`-i` `layout: "project"`: TUI와 같은 폴더(프로젝트 표시 이름, 조직·계정명) 사용. 기본값 `source`는 기존 경로 유지.
 - TUI 실행 대시보드: 전체 진행률, 현재 저장소·경과 시간, Git 로그, 결과 집계 및 프로세스 트리 취소.
 - TUI의 Git/SSH 입력 대기를 비활성화하고 인증·호스트 키 확인 실패를 별도로 안내.
 - GitHub 개인 계정 모드: 토큰으로 계정명 자동 확인, 본인 소유 공개·비공개 저장소 조회 및 선택. batch provider는 github-user.
@@ -21,7 +22,7 @@
 
 - 기본 실행은 TUI이며 자동화는 `--batch --config batch.json`을 명시.
 - TUI 설정은 username·token 전용. 전체 작업 설정은 메모리에서 만들고 저장하지 않음.
-- TUI Bitbucket 경로는 프로젝트 표시 이름 아래에 저장소를 배치. batch/-i 경로 규칙은 유지.
+- TUI Bitbucket 경로는 프로젝트 표시 이름 아래에 저장소를 배치. batch/-i 기본 경로 규칙은 유지(`layout: "project"`로 TUI와 통일 가능).
 - TUI 마지막 Enter는 실행, N/Esc/Q는 취소. 번호 입력 모드의 마지막 Enter는 계속 취소.
 - 루트 repositories.example.json은 examples/credentials.json으로 이동.
 - 루트 repositories.batch.example.json은 examples/batch.all-providers.json으로 이동.

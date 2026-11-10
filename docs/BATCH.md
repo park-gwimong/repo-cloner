@@ -85,8 +85,37 @@ GitHub 개인 계정은 [github-user 예제](../examples/batch.github-user.json)
 | GitHub 개인 계정 (`github-user`) | `<destination>/<source.name>/<repository>` |
 | 직접 Git URL | `<destination>/<source.name>/<repository.name>` |
 
-TUI의 `<destination>/<프로젝트 표시 이름>/<repository>`와 경로 규칙이 다릅니다.
-batch에서도 프로젝트명 바로 아래에 저장하려면 **프로젝트마다 source를 하나씩 만들고 `name`을 프로젝트명으로 설정**하세요.
+위 표는 기본값 `"layout": "source"`의 규칙이며 TUI의 `<destination>/<프로젝트 표시 이름>/<repository>`와 다릅니다.
+
+### TUI와 같은 경로 쓰기 (`"layout": "project"`)
+
+최상위에 `"layout": "project"`를 지정하면 batch와 `-i`도 TUI와 같은 폴더를 사용합니다.
+
+| 대상 | `layout: "project"` 경로 |
+| --- | --- |
+| Bitbucket (`project` / `projects`) | `<destination>/<프로젝트 표시 이름>/<repository>` |
+| GitHub 조직 | `<destination>/<organization>/<repository>` |
+| GitHub 개인 계정 | `<destination>/<토큰 계정명>/<repository>` |
+| 직접 Git URL | `<destination>/<source.name>/<repository.name>` |
+
+```json
+{
+  "credentials": "./repositories.json",
+  "destination": "./clones",
+  "layout": "project",
+  "sources": [
+    {"name": "company", "provider": "bitbucket-cloud", "workspace": "YOUR_WORKSPACE", "projects": ["APP", "OPS"]}
+  ]
+}
+```
+
+- 프로젝트 표시 이름은 저장소 목록 응답에서 읽으므로 추가 API 호출이나 권한이 필요 없습니다. source.name은 로그 표시용 식별자로만 쓰입니다.
+- 서로 다른 source나 프로젝트가 같은 폴더(대소문자 무시)로 모이면 뒤쪽 항목을 실패로 처리하고 나머지는 계속합니다.
+- 표시 이름에 `/` 등 폴더에 쓸 수 없는 문자가 있으면 해당 프로젝트는 실패합니다. 이때는 기본 layout을 쓰세요.
+- 서버에서 프로젝트 이름을 바꾸면 다음 실행부터 새 이름의 폴더에 clone합니다. 기존 폴더는 옮기지 않습니다.
+- TUI 실행에는 이 설정이 적용되지 않습니다(TUI는 항상 이 규칙을 씁니다).
+
+기본 layout에서 프로젝트명 바로 아래에 저장하려면 **프로젝트마다 source를 하나씩 만들고 `name`을 프로젝트명으로 설정**하는 방법도 있습니다.
 
 ```json
 {

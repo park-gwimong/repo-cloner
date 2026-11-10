@@ -7,7 +7,7 @@
 | 구분 | TUI (기본) | batch / 번호 입력 모드 |
 | --- | --- | --- |
 | 권장 파일 | repositories.json | batch.json |
-| 최상위 필드 | username, token만 허용 | credentials, destination, protocol, sources |
+| 최상위 필드 | username, token만 허용 | credentials, destination, protocol, layout, sources |
 | 인증 위치 | 최상위 | 참조한 인증 파일 또는 sources의 각 항목 |
 | 작업 대상·경로 | TUI에서 입력·선택 | 파일에서 읽음 |
 | 저장·파일 병합 | 선택하면 batch 파일로 저장 | `credentials`로 지정한 인증 파일만 읽음 |
@@ -32,6 +32,7 @@ token만 있으면 Bearer 인증, `{}`는 익명 조회·직접 URL 용도입니
 | `credentials` | 문자열 / 없음 | 모든 source의 기본 인증 파일 경로. 설정 파일 기준 상대 경로, `~` 지원 |
 | `destination` | 문자열 / `./clones` | 설정 파일 기준 저장 루트. CLI --destination이 우선 |
 | `protocol` | `ssh` 또는 `https` / `ssh` | API provider의 clone URL 형식 |
+| `layout` | `source` 또는 `project` / `source` | 저장 폴더 규칙. `project`는 TUI와 같은 경로 ([batch 가이드](BATCH.md#tui와-같은-경로-쓰기-layout-project)) |
 | `sources` | 비어 있지 않은 객체 배열 / 필수 | 순서대로 실행할 연결 및 대상 |
 
 ## Source 공통 필드

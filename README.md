@@ -134,7 +134,7 @@ Bitbucket 프로젝트는 `<저장 경로>/<프로젝트명>/<저장소 이름>`
 예를 들어 `KEY` 키의 프로젝트명이 `관제 시스템`이면 `clones/관제 시스템/api` 형태입니다.
 GitHub는 `<저장 경로>/<개인 계정명 또는 조직명>/<저장소 이름>`, 직접 Git URL은 `<저장 경로>/<입력한 프로젝트명>/<저장소 이름>`에 저장됩니다.
 같은 이름의 프로젝트를 동시에 선택하거나 프로젝트명을 폴더명으로 사용할 수 없으면 실행 전에 오류로 중단합니다.
-기존 `--batch` 및 `-i`의 설정 기반 경로 규칙은 유지됩니다.
+`--batch`·`-i`는 기본적으로 설정 기반 경로 규칙을 쓰며, `"layout": "project"`를 지정하면 TUI와 같은 경로를 씁니다.
 저장 경로를 바꾸면 새 경로를 대상으로 실행하며 기존 폴더를 이동하지 않습니다.
 
 입력 화면에서는 `Ctrl+U`로 기존 값을 지우고 새 값을 입력하세요. 한글·공백·대소문자를 유지합니다.
@@ -242,9 +242,11 @@ API provider를 사용하면 해당 source에 workspace·조직·프로젝트 �
 | TUI 직접 URL | `<destination>/<입력한 프로젝트명>/<저장소>` |
 | Batch 단일 project / GitHub / 직접 URL | `<destination>/<source.name>/<저장소>` |
 | Batch projects 목록 | `<destination>/<source.name>/<프로젝트 키>/<저장소>` |
+| Batch·`-i` + `"layout": "project"` | TUI와 동일 (프로젝트 표시 이름, 조직명, 계정명, 직접 URL은 source.name) |
 
-batch도 프로젝트명 바로 아래에 저장하려면 프로젝트마다 source를 만들고
-`name`을 프로젝트명, `project`를 API 프로젝트 키로 지정하세요.
+여러 PC에서 TUI와 batch를 섞어 쓴다면 batch 설정 최상위에 `"layout": "project"`를 지정하세요.
+기본값 `"source"`는 기존 경로를 그대로 유지하므로, 이미 clone한 저장소가 있다면 바꾸기 전에 `--dry-run`으로 경로를 확인하세요.
+경로가 바뀌어도 기존 폴더를 옮기지 않고 새 위치에 clone합니다.
 JSON destination의 상대 경로는 **설정 파일 위치**, CLI --destination의 상대 경로는 **현재 작업 디렉터리** 기준입니다.
 
 ### 처리와 자동화

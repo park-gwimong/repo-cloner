@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 import json
 import os
@@ -84,6 +84,8 @@ class NoRedirect(HTTPRedirectHandler):
 class Repository:
     name: str
     url: str
+    # Bitbucket project display name or GitHub owner login, used by layout "project".
+    namespace: str | None = field(default=None, compare=False)
 
 
 def folder_name(value: str) -> str:
@@ -759,11 +761,17 @@ class Api:
             time.sleep(attempt)
 
 
+def _namespace(item: dict, key: str, field_name: str) -> str | None:
+    owner = item.get(key)
+    value = owner.get(field_name) if isinstance(owner, dict) else None
+    return value if isinstance(value, str) and value else None
+
+
 def clone_link(item: dict, protocol: str, server: bool = False) -> Repository:
     name = "http" if server and protocol == "https" else protocol
     for link in item["links"]["clone"]:
         if link["name"] == name:
-            return Repository(item["slug"], link["href"])
+            return Repository(item["slug"], link["href"], _namespace(item, "project", "name"))
     raise ClonerError(f"Missing {protocol} clone URL for {item['slug']}")
 
 
@@ -812,7 +820,8 @@ def repositories(source: dict, protocol: str) -> Iterator[Repository]:
             if not isinstance(items, list):
                 raise ClonerError("Invalid GitHub repository list response")
             for item in items:
-                yield Repository(item["name"], item["ssh_url" if protocol == "ssh" else "clone_url"])
+                yield Repository(item["name"], item["ssh_url" if protocol == "ssh" else "clone_url"],
+                                 _namespace(item, "owner", "login"))
             if len(items) < 100:
                 break
             page += 1
@@ -1087,6 +1096,34 @@ def _project_sources(source: dict) -> list[tuple[dict, tuple[str, ...]]]:
     return expanded
 
 
+LAYOUTS = ("source", "project")
+
+
+def _project_folder(source: dict, repos: list[Repository]) -> str:
+    """Folder used by layout "project"; matches the folder TUI would choose.
+
+    Bitbucket: project display name. GitHub organization: organization.
+    GitHub personal account: owner login. Direct Git URLs: source name.
+    """
+    provider = source["provider"]
+    if provider == "github":
+        value = required(source, "organization")
+    elif provider in {"github-user", "bitbucket-cloud", "bitbucket-server"}:
+        names = {repo.namespace for repo in repos if repo.namespace}
+        if len(names) > 1:
+            raise ClonerError("Repositories in one project report different project names")
+        # With no repositories nothing is created, so the fallback is only a label.
+        value = names.pop() if names else source.get("project") or source["name"]
+    else:
+        value = source["name"]
+    try:
+        return folder_name(value)
+    except ClonerError:
+        raise ClonerError(
+            f"Project name {value!r} cannot be used as a folder name; use layout \"source\""
+        ) from None
+
+
 def _select_indices(title: str, labels: list[str]) -> list[int]:
     print(f"\n{title} ({len(labels)})", flush=True)
     for index, label in enumerate(labels, 1):
@@ -1273,6 +1310,11 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
     protocol = config.get("protocol", "ssh")
     if protocol not in {"ssh", "https"}:
         raise ClonerError("protocol must be ssh or https")
+    layout = config.get("layout", "source")
+    if layout not in LAYOUTS:
+        raise ClonerError("layout must be source or project")
+    # TUI chooses its own project folders, so layout only applies to batch and -i.
+    project_layout = layout == "project" and ui is None
     sources = config.get("sources")
     if not isinstance(sources, list) or not sources:
         raise ClonerError("sources must be a nonempty list")
@@ -1317,16 +1359,27 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
     tasks = []
     origins = []  # index into expanded for each task, used to save a batch file
     targets = set()
+    project_folders: dict[str, int] = {}
     for index, (source, parts) in enumerate(expanded, 1):
         label = "/".join(parts)
-        parent = root.joinpath(*parts)
         print(f"[{index}/{len(expanded)} {label}] Fetching repositories...", flush=True)
         try:
             repos = list(repositories(source, protocol))
+            if project_layout:
+                folder = _project_folder(source, repos)
+                owner = project_folders.setdefault(folder.casefold(), index)
+                if owner != index:
+                    raise ClonerError(
+                        f"Folder {folder!r} is already used by another source; "
+                        "use distinct names or layout \"source\""
+                    )
+                parts = (folder,)
+                label = folder
         except (ClonerError, KeyError, TypeError, ValueError) as exc:
             print(f"[{label}] Listing failed: {exc}", file=sys.stderr, flush=True)
             counts["failed"] += 1
             continue
+        parent = root.joinpath(*parts)
         print(f"[{label}] Found {len(repos)} repositories", flush=True)
         include = _patterns(source, "include")
         exclude = _patterns(source, "exclude")
