@@ -77,7 +77,7 @@ PC마다 저장소를 clone하지 않고 [pipx](https://pipx.pypa.io/)로 명령
 **버전 태그를 지정하면** 모든 PC가 같은 버전을 사용합니다.
 
 ```bash
-pipx install "git+https://github.com/park-gwimong/repo-cloner.git@v0.2.1"
+pipx install "git+https://github.com/park-gwimong/repo-cloner.git@v0.3.0"
 repo-cloner --version
 # 새 버전으로 바꿀 때: vX.Y.Z를 원하는 태그로 바꿔 다시 설치
 pipx install --force "git+https://github.com/park-gwimong/repo-cloner.git@vX.Y.Z"
