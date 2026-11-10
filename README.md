@@ -33,12 +33,14 @@ Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 �
 - 키보드 TUI의 workspace → 프로젝트 → 저장소 선택과 저장 경로 편집
 - 여러 source·프로젝트를 처리하는 batch 및 include/exclude 이름 필터
 - TUI 선택을 토큰 없는 batch 파일로 저장해 다른 PC에서 같은 구성 재현
+- `--status`로 설정과 로컬 상태 비교 (미clone·push 안 한 커밋·로컬 변경·설정에 없는 저장소)
+- 선택적 서브모듈 초기화와 Git LFS 미설치 경고
 - 실행 대상과 경로 미리 보기, 저장소 단위 진행률 및 결과 집계
 - 기존 작업 트리를 검사하고 현재 upstream만 fast-forward하는 갱신 정책
 - Python 표준 라이브러리 기반 구현, Windows/macOS/Linux CI 구성
 
 복제 단위는 Git 저장소의 일반 작업 트리입니다. 전체 refs를 보관하는 mirror 백업,
-로컬 미커밋 변경 백업, 서브모듈 자동 초기화, 여러 저장소의 병렬 clone은 지원하지 않습니다.
+로컬 미커밋 변경 백업, 여러 저장소의 병렬 clone은 지원하지 않습니다. 서브모듈은 batch 설정의 `"submodules": true`로 켤 수 있습니다.
 
 ## 요구 사항과 설치
 
@@ -115,8 +117,9 @@ repo-cloner
 | TUI (기본) | `python repo_cloner.py` | 인증 전용 repositories.json | 화면 설정·다중 선택, 마지막 Enter로 실행 | 목록을 탐색하며 수동 실행 |
 | Batch | `python repo_cloner.py --batch --config batch.json` | 전체 source 설정 | 앱 선택·확인 없음 | 같은 대상 반복 실행, 예약 작업, CI |
 | 번호 입력 | `python repo_cloner.py -i --config batch.json` | 전체 source 설정 | 번호 선택 후 y로 실행, Enter는 취소 | 단순 콘솔에서 선택 실행 |
+| 상태 점검 | `python repo_cloner.py --status --config batch.json` | 전체 source 설정 | 없음 (읽기 전용) | 다른 PC와 맞는지, push 안 한 작업이 있는지 확인 |
 
-세 모드 모두 `--dry-run`을 지원합니다. `--batch`, `-i`, `--tui`는 동시에 지정할 수 없습니다.
+세 실행 모드 모두 `--dry-run`을 지원합니다. `--batch`, `-i`, `--tui`, `--status`는 동시에 지정할 수 없습니다.
 전체 설정 파일은 `"credentials"` 필드로 인증 전용 파일을 참조할 수 있습니다. 지정하지 않으면 두 파일을 합치지 않습니다.
 
 ## TUI 실행 흐름
@@ -195,6 +198,29 @@ TUI에서 한 번 고른 저장소 구성을 **토큰 없는 batch 파일**로 �
 python repo_cloner.py --batch --config batch.json --dry-run
 python repo_cloner.py --batch --config batch.json
 ```
+
+PC를 옮기기 전후에는 `--status`로 상태를 확인하세요. 아무것도 바꾸지 않고 설정과 로컬 폴더를 비교합니다.
+
+```bash
+python repo_cloner.py --status --config batch.json
+```
+
+| 상태 | 의미 |
+| --- | --- |
+| `OK` | 최신 상태 (마지막 fetch 기준) |
+| `BEHIND` | 원격보다 뒤처짐. batch가 fast-forward |
+| `AHEAD` | **push하지 않은 로컬 커밋** 있음. PC를 옮기기 전에 push 필요 |
+| `DIVERGED` | 로컬과 원격이 갈라짐. batch는 건너뜀 |
+| `MISSING` | 아직 clone하지 않음. batch가 clone |
+| `SKIP` | 로컬 변경·URL 불일치·detached HEAD 등. batch가 건너뛰는 사유와 같음 |
+| `WARN` | 서브모듈 미초기화, Git LFS를 쓰는데 git-lfs 미설치 등 |
+| `EXTRA` | 설정한 폴더 안에 있지만 설정에 없는 Git 저장소 |
+| `PARTIAL` | 실패한 clone이 남긴 `.clone-*` 임시 폴더 |
+| `ERROR` | Git 검사 실패 |
+
+`--status`는 fetch하지 않으므로 원격의 최신 커밋은 반영하지 않습니다. 원격 목록 조회에는 batch와 같은 API 인증이 필요합니다.
+모든 항목이 `OK`이고 조회 실패가 없으면 종료 코드 0, 그 외에는 1입니다.
+EXTRA는 같은 source 폴더 안만 확인합니다. name 필터로 제외한 저장소가 그 폴더에 있으면 EXTRA로 표시됩니다.
 
 저장된 batch는 TUI와 **같은 폴더 구조**(`<저장 경로>/<프로젝트명 또는 계정·조직명>/<저장소>`)를 만듭니다.
 저장 경로와 인증 파일 경로는 batch 파일 기준 상대 경로(`./...`), 홈 폴더 아래면 `~/...`로 기록하므로
@@ -285,9 +311,10 @@ Git URL에는 비밀번호나 토큰을 넣지 않습니다. Bitbucket Cloud 토
 | `--dry-run` | 조회·대상 표시만 수행. Git 실행 및 폴더 생성 없음 |
 | `--batch` | 별도의 전체 source 설정 파일로 확인 입력 없이 일괄 실행 |
 | `--interactive`, `-i` | 별도의 전체 source 설정 파일로 기존 번호 입력 모드 실행 |
+| `--status` | 전체 source 설정과 로컬 폴더 비교. 읽기 전용, fetch 없음 |
 | `--help` | 도움말 |
 
-`--tui`, `--batch`, `-i`는 함께 사용할 수 없습니다.
+`--tui`, `--batch`, `-i`, `--status`는 함께 사용할 수 없습니다.
 기존 전체 설정 파일은 별도 이름으로 보관하고 `--batch` 또는 `-i`로 실행하세요.
 TUI는 인증 전용 형식을 검사하며 기존 전체 설정 파일을 자동 변경하지 않습니다.
 
@@ -306,7 +333,8 @@ python repo_cloner.py -i --config batch.json
 
 없는 경로는 clone하고 기존 일반 디렉터리는 안전 조건을 확인한 뒤 현재 upstream만 fast-forward합니다.
 원격 URL이 다르거나 로컬 수정·untracked 파일·진행 중 Git 작업·불명확한 upstream이 있으면 건너뜁니다.
-로컬 커밋은 보존하며 stash, reset, clean, rebase를 실행하지 않습니다. 서브모듈도 자동 초기화하지 않습니다.
+로컬 커밋은 보존하며 stash, reset, clean, rebase를 실행하지 않습니다. 서브모듈은 `"submodules": true`일 때만 clone 시 함께 받고, 안전 검사를 통과한 update 뒤에 `git submodule update --init --recursive`로 맞춥니다.
+Git LFS를 쓰는 저장소(루트 `.gitattributes`에 `filter=lfs`)인데 git-lfs가 없으면 clone 직후 `WARN`을 출력합니다.
 `UPDATE?`는 갱신 후보이며 안전 검사가 끝났다는 뜻은 아닙니다.
 
 진행률은 처리한 저장소 수를 기준으로 하며 마지막에 `cloned`, `updated`, `unchanged`,

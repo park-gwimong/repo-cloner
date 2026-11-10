@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _replace
 from fnmatch import fnmatchcase
 import json
 import os
@@ -86,6 +86,8 @@ class Repository:
     url: str
     # Bitbucket project display name or GitHub owner login, used by layout "project".
     namespace: str | None = field(default=None, compare=False)
+    # Initialize submodules on clone and after a safe update ("submodules": true).
+    submodules: bool = field(default=False, compare=False)
 
 
 def folder_name(value: str) -> str:
@@ -579,6 +581,39 @@ def _prepare_hooks(target: Path) -> tuple[tempfile.TemporaryDirectory, Path]:
     return temporary, hooks
 
 
+def _update_submodules(target: Path, hooks_path: Path | None) -> None:
+    try:
+        _git(target, ["submodule", "update", "--init", "--recursive"], hooks_path)
+    except ClonerError as exc:
+        raise ClonerError(f"Submodule update failed; the main repository is unchanged by this step ({exc})") from None
+
+
+def _uses_lfs(target: Path) -> bool:
+    try:
+        text = (target / ".gitattributes").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "filter=lfs" in text
+
+
+_lfs_available: bool | None = None
+
+
+def _lfs_installed() -> bool:
+    global _lfs_available
+    if _lfs_available is None:
+        try:
+            result = subprocess.run(["git", "lfs", "version"], capture_output=True,
+                                    stdin=subprocess.DEVNULL, check=False)
+            _lfs_available = result.returncode == 0
+        except OSError:
+            _lfs_available = False
+    return _lfs_available
+
+
+_LFS_WARNING = "uses Git LFS but git-lfs is not installed; large files are pointer files. Install git-lfs, then run: git lfs pull"
+
+
 def _update_existing(repo: Repository, target: Path) -> str:
     """Fetch the configured upstream and fast-forward one existing worktree."""
     target_abs = Path(os.path.abspath(os.fspath(target)))
@@ -665,6 +700,9 @@ def _update_existing(repo: Repository, target: Path) -> str:
                     raise ClonerError("Git fast-forward completed with an unexpected HEAD")
                 result = "updated"
                 message = f"UPDATE {target}"
+            if repo.submodules:
+                # Only reached after the clean-tree checks, so local work is never overwritten.
+                _update_submodules(target, hooks_path)
         except _SkipUpdate as exc:
             result = "skipped"
             message = f"SKIP  {target} ({exc})"
@@ -890,7 +928,10 @@ def clone(repo: Repository, parent: Path, dry_run: bool) -> str:
     temporary = parent / f".clone-{uuid4().hex}"
     print(f"CLONE {target}", flush=True)
     try:
-        _run_git_process(["git", "clone", "--progress", "--", repo.url, str(temporary)], check=True)
+        command = ["git", "clone", "--progress"]
+        if repo.submodules:
+            command.append("--recurse-submodules")
+        _run_git_process([*command, "--", repo.url, str(temporary)], check=True)
         # Reserve the destination atomically; do not overwrite a concurrent clone.
         target.mkdir()
         try:
@@ -905,6 +946,8 @@ def clone(repo: Repository, parent: Path, dry_run: bool) -> str:
         if temporary.exists():
             print(f"Partial clone retained: {temporary}", file=sys.stderr)
         raise ClonerError(f"Clone failed ({type(exc).__name__})") from None
+    if _uses_lfs(target) and not _lfs_installed():
+        print(f"WARN  {target} {_LFS_WARNING}", flush=True)
     return "cloned"
 
 
@@ -1059,6 +1102,89 @@ def _offer_batch_save(ui, config_path: Path, root: Path, protocol: str,
         print(f"Batch file cannot be saved: {exc}", file=sys.stderr, flush=True)
         return
     save(export, config_path.resolve().parent / "batch.json")
+
+
+_STATUS_STATES = ("ok", "behind", "ahead", "diverged", "missing", "skip", "warn", "partial", "extra", "error")
+
+
+def _inspect(repo: Repository, target: Path) -> tuple[str, str]:
+    """Read-only local state of one target; uses the same checks as update."""
+    if not (target.exists() or target.is_symlink() or _is_reparse_point(target)):
+        return "missing", "not cloned yet; batch will clone it"
+    if not target.is_dir() or target.is_symlink() or _is_reparse_point(target):
+        return "skip", "existing path is not a regular directory"
+    if _remote_identity(repo.url) is None:
+        return "skip", "configured remote URL is not safely identifiable"
+    try:
+        snapshot = _snapshot(target, repo.url, None)
+    except _SkipUpdate as exc:
+        return "skip", f"{exc}; batch will skip it"
+    except ClonerError as exc:
+        return "error", str(exc)
+    try:
+        tracking = _oid(target, snapshot.upstream.tracking_ref, None, optional=True)
+        if tracking is None:
+            state, detail = "ok", "no remote-tracking ref yet"
+        else:
+            ahead, behind = _ref_counts(target, snapshot.head_oid, tracking, None)
+            if ahead and behind:
+                state, detail = "diverged", f"{ahead} local and {behind} remote commits differ; batch will skip it"
+            elif ahead:
+                state, detail = "ahead", f"{ahead} local commit(s) not pushed"
+            elif behind:
+                state, detail = "behind", f"{behind} commit(s) behind; batch will fast-forward"
+            else:
+                state, detail = "ok", "up to date"
+        notes = []
+        if repo.submodules:
+            lines = _git_required(target, ["submodule", "status", "--recursive"], None).splitlines()
+            if any(line.startswith("-") for line in lines):
+                notes.append("submodules not initialized; batch will initialize them")
+        if _uses_lfs(target) and not _lfs_installed():
+            notes.append(_LFS_WARNING)
+    except ClonerError as exc:
+        return "error", str(exc)
+    if notes:
+        state = "warn" if state == "ok" else state
+        detail = "; ".join([detail, *notes])
+    return state, detail
+
+
+def _status_report(tasks: list, listing_failed: int) -> int:
+    """Compare the configuration with the disk without fetching or changing anything."""
+    counts = dict.fromkeys(_STATUS_STATES, 0)
+    print("Status: local check only (no fetch); ahead/behind use each repository's last fetch", flush=True)
+    targets = set()
+    parents = {}
+    for repo, parent, label in tasks:
+        target = parent / repo.name
+        state, detail = _inspect(repo, target)
+        counts[state] += 1
+        print(f"{state.upper():<8} {label}/{repo.name} | {detail} | {target}", flush=True)
+        targets.add(_normalize_path(target))
+        parents.setdefault(_normalize_path(parent), (parent, label))
+    # Report what is on disk next to configured repositories but not in the configuration.
+    for parent, label in parents.values():
+        try:
+            children = sorted(parent.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if _normalize_path(child) in targets or not child.is_dir() or child.is_symlink():
+                continue
+            if child.name.startswith(".clone-"):
+                state, detail = "partial", "temporary folder left by a failed clone; inspect and delete it"
+            elif _present(child / ".git"):
+                state, detail = "extra", "Git repository not in this configuration"
+            else:
+                continue
+            counts[state] += 1
+            print(f"{state.upper():<8} {label}/{child.name} | {detail} | {child}", flush=True)
+    print("Summary: " + " ".join(f"{key}={value}" for key, value in counts.items())
+          + f" listing_failed={listing_failed}", flush=True)
+    in_sync = not listing_failed and all(value == 0 for key, value in counts.items() if key != "ok")
+    print("In sync with the configuration." if in_sync else "Needs attention: see entries other than OK.", flush=True)
+    return 0 if in_sync else 1
 
 
 def _patterns(source: dict, key: str) -> list[str]:
@@ -1300,7 +1426,8 @@ def _run_with_progress(repo: Repository, parent: Path, dry_run: bool,
 
 
 def run(config_path: Path, dry_run: bool = False, destination: Path | None = None,
-        *, interactive: bool = False, ui=None, config: dict | None = None, progress_ui=None) -> int:
+        *, interactive: bool = False, ui=None, config: dict | None = None, progress_ui=None,
+        status: bool = False) -> int:
     interactive = interactive or ui is not None
     select = ui.select if ui is not None else _select_indices
     if config is None:
@@ -1315,6 +1442,9 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         raise ClonerError("layout must be source or project")
     # TUI chooses its own project folders, so layout only applies to batch and -i.
     project_layout = layout == "project" and ui is None
+    default_submodules = config.get("submodules", False)
+    if not isinstance(default_submodules, bool):
+        raise ClonerError("submodules must be true or false")
     sources = config.get("sources")
     if not isinstance(sources, list) or not sources:
         raise ClonerError("sources must be a nonempty list")
@@ -1331,6 +1461,8 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         if not isinstance(source, dict):
             raise ClonerError("Each source must be an object")
         source = _with_credentials(source, default_credentials, base_dir, credential_cache)
+        if not isinstance(source.get("submodules", default_submodules), bool):
+            raise ClonerError("submodules must be true or false")
         resolved_sources.append(source)
         name = folder_name(required(source, "name"))
         if name.casefold() in names:
@@ -1396,6 +1528,8 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
                 if target_key in targets:
                     raise ClonerError("Duplicate repository destination")
                 targets.add(target_key)
+                if source.get("submodules", default_submodules):
+                    repo = _replace(repo, submodules=True)
                 tasks.append((repo, parent, label))
                 origins.append(index - 1)
             except (ClonerError, OSError) as exc:
@@ -1407,6 +1541,8 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         counts["skipped"] += len(tasks) - len(selected)
         tasks = [tasks[index] for index in selected]
         origins = [origins[index] for index in selected]
+    if status:
+        return _status_report(tasks, counts["failed"])
     print(f"Targets: {len(tasks)} repositories", flush=True)
     preview = []
     print("# | Source / Repository | Action | Destination", flush=True)
@@ -1479,8 +1615,14 @@ def main() -> int:
         "--batch", action="store_true",
         help="Run a full sources configuration without terminal menus",
     )
+    modes.add_argument(
+        "--status", action="store_true",
+        help="Compare a full sources configuration with local folders; read-only, no fetch",
+    )
     args = parser.parse_args()
     try:
+        if args.status:
+            return run(args.config, False, args.destination, status=True)
         if not args.batch and not args.interactive:
             from repo_cloner_tui import TerminalUI
 

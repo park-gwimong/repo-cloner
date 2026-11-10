@@ -34,7 +34,7 @@ upstream을 갱신합니다. 별도 `--update` 옵션은 없습니다. 실행 �
 
 조건을 통과하면 현재 upstream 한 개만 목적지 ref 없이 `FETCH_HEAD`로 가져옵니다.
 `--refmap=`, `--no-tags`, `--no-prune`으로 다른 branch/tag/tracking ref의 변경을
-막으며 서브모듈은 초기화하거나 재귀 fetch하지 않습니다. 가져온 단일 커밋을
+막으며 서브모듈은 재귀 fetch하지 않습니다(`"submodules": true`면 아래 마지막 단계에서만 갱신). 가져온 단일 커밋을
 검증한 뒤 기존 tracking ref가 검사 당시 값일 때만 원자적 비교·교환으로 갱신합니다.
 현재 로컬 브랜치는 그 정확한 커밋 ID까지 fast-forward만 수행합니다.
 local-only 또는 diverged 커밋은 보존하고 `skipped`로 끝납니다.
@@ -56,7 +56,8 @@ worktree 검사, 기존 디렉터리 갱신 자격 판정은 하지 않습니다
 선택 중 `q`·입력 종료·Ctrl+C로 중단하면 130입니다. 번호 입력 모드(`-i`)의 실행 확인에서 `n` 또는 Enter를 입력하면
 저장소를 변경하지 않고 종료하며, 앞선 조회 실패가 없으면 0, 있으면 1입니다. 실패한 clone은 `.clone-<임의 값>` 임시 폴더를 남길 수
 하므로 출력된 경로를 확인한 뒤 원인을 해결하고 다시 실행하세요. 갱신은 stash,
-reset, clean, rebase를 하지 않으며 서브모듈도 자동 초기화하지 않습니다. 갱신용
+reset, clean, rebase를 하지 않습니다. `"submodules": true`인 저장소만 깨끗한 상태 확인과 fast-forward 뒤
+`git submodule update --init --recursive`를 실행하며, 이 단계도 같은 임시 hook 디렉터리를 사용합니다. 갱신용
 임시 hook 디렉터리 정리에 실패하면 오류와 해당 절대 경로를 출력하며, 이미 수행된
 fast-forward를 되돌리지 않습니다.
 

@@ -9,6 +9,9 @@
 
 - TUI 선택을 batch 파일로 저장. 토큰 대신 인증 파일 경로를 기록하고, TUI와 같은 폴더 구조를 재현.
 - batch `credentials` 필드: 최상위 또는 source별로 username·token 인증 파일을 참조.
+- `--status` 모드: 설정과 로컬 상태 비교(읽기 전용, fetch 없음). OK/BEHIND/AHEAD/DIVERGED/MISSING/SKIP/WARN/EXTRA/PARTIAL 표시.
+- batch `submodules` 설정: clone 시 서브모듈 포함, 안전한 update 뒤 서브모듈 갱신.
+- Git LFS 저장소인데 git-lfs가 없으면 clone 직후와 `--status`에서 경고.
 - batch·`-i` `layout: "project"`: TUI와 같은 폴더(프로젝트 표시 이름, 조직·계정명) 사용. 기본값 `source`는 기존 경로 유지.
 - TUI 실행 대시보드: 전체 진행률, 현재 저장소·경과 시간, Git 로그, 결과 집계 및 프로세스 트리 취소.
 - TUI의 Git/SSH 입력 대기를 비활성화하고 인증·호스트 키 확인 실패를 별도로 안내.

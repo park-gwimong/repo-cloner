@@ -28,7 +28,8 @@ flowchart TD
 ```
 
 TUI configure가 생성하는 destination/protocol/sources는 파일에 저장되지 않습니다.
-run은 같은 실행 엔진을 세 모드에서 재사용합니다. `-i`는 번호 기반 선택,
+run은 같은 실행 엔진을 세 모드에서 재사용합니다. `--status`도 같은 조회·필터·경로 계산을 거친 뒤 실행 대신
+읽기 전용 점검(`_status_report`)을 수행하며, 기존 저장소 판정에는 update와 같은 `_snapshot` 검사를 사용합니다. `-i`는 번호 기반 선택,
 TUI는 UI 선택 함수를 전달하며 batch는 선택 단계를 생략합니다.
 
 API 목록 조회는 동기적으로 수행하고 저장소도 순차 처리합니다.

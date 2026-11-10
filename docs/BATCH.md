@@ -248,7 +248,8 @@ Git이 실행 계정의 PATH에 있어야 하며 그 계정의 SSH 키·Git Cred
 같은 설정으로 다시 실행하면 기존 경로를 검사합니다. clone을 무조건 덮어쓰거나 로컬 변경을 버리지 않습니다.
 현재 브랜치와 원격 URL·upstream·작업 트리 상태가 안전할 때만 fast-forward합니다.
 진행 중 Git 작업, 로컬 수정, untracked 파일, 원격 URL 차이는 건너뛰는 사유입니다.
-`stash`, `reset`, `clean`, `rebase`를 실행하지 않으며 서브모듈도 자동 초기화하지 않습니다.
+`stash`, `reset`, `clean`, `rebase`를 실행하지 않습니다. 서브모듈은 기본적으로 초기화하지 않으며 `"submodules": true`로 켤 수 있습니다([설정](CONFIGURATION.md#서브모듈과-git-lfs)).
+실행 전후 상태 비교는 `python repo_cloner.py --status --config batch.json`을 사용하세요([README](../README.md#여러-pc에서-같은-구성-만들기)).
 
 실패한 clone의 임시 폴더는 `.clone-<임의 값>`으로 남을 수 있습니다. 출력된 경로를 확인하고 원인을 해결하세요.
 일부 갱신은 skipped여도 FETCH_HEAD나 tracking metadata를 갱신했을 수 있습니다. 정확한 보호 범위는 [안전 정책](SAFETY.md)을 보세요.
@@ -262,4 +263,4 @@ python repo_cloner.py -i --config batch.json
 ```
 
 `-i`의 마지막 확인은 `y`가 실행이고 Enter는 취소입니다. TUI의 Enter 실행과 다릅니다.
-`--batch`, `-i`, `--tui`는 상호 배타적입니다.
+`--batch`, `-i`, `--tui`, `--status`는 상호 배타적입니다.

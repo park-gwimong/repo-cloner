@@ -7,7 +7,7 @@
 | 구분 | TUI (기본) | batch / 번호 입력 모드 |
 | --- | --- | --- |
 | 권장 파일 | repositories.json | batch.json |
-| 최상위 필드 | username, token만 허용 | credentials, destination, protocol, layout, sources |
+| 최상위 필드 | username, token만 허용 | credentials, destination, protocol, layout, submodules, sources |
 | 인증 위치 | 최상위 | 참조한 인증 파일 또는 sources의 각 항목 |
 | 작업 대상·경로 | TUI에서 입력·선택 | 파일에서 읽음 |
 | 저장·파일 병합 | 선택하면 batch 파일로 저장 | `credentials`로 지정한 인증 파일만 읽음 |
@@ -32,6 +32,7 @@ token만 있으면 Bearer 인증, `{}`는 익명 조회·직접 URL 용도입니
 | `credentials` | 문자열 / 없음 | 모든 source의 기본 인증 파일 경로. 설정 파일 기준 상대 경로, `~` 지원 |
 | `destination` | 문자열 / `./clones` | 설정 파일 기준 저장 루트. CLI --destination이 우선 |
 | `protocol` | `ssh` 또는 `https` / `ssh` | API provider의 clone URL 형식 |
+| `submodules` | `true` / `false` / `false` | 서브모듈 초기화 기본값. source별 `submodules`가 우선 |
 | `layout` | `source` 또는 `project` / `source` | 저장 폴더 규칙. `project`는 TUI와 같은 경로 ([batch 가이드](BATCH.md#tui와-같은-경로-쓰기-layout-project)) |
 | `sources` | 비어 있지 않은 객체 배열 / 필수 | 순서대로 실행할 연결 및 대상 |
 
@@ -44,6 +45,7 @@ token만 있으면 Bearer 인증, `{}`는 익명 조회·직접 URL 용도입니
 | `include` | 문자열 배열 / `[]` | 저장소 이름 glob. 빈 목록이면 전체 후보 |
 | `exclude` | 문자열 배열 / `[]` | 저장소 이름 glob. include보다 우선 |
 | `credentials` | 선택 문자열 | 이 source만 쓸 인증 파일 경로. 최상위 credentials보다 우선 |
+| `submodules` | 선택 `true`/`false` | 이 source의 서브모듈 초기화 여부. 최상위 값보다 우선 |
 | `token` | 선택 문자열 | 실제 API 토큰. 환경변수 이름이 아님 |
 | `username` | 선택 문자열 | token과 함께 있으면 Basic 인증. token 없이 단독 사용 불가 |
 
@@ -94,6 +96,17 @@ batch는 프로젝트 키를 미리 지정해야 합니다. `projects`는 Bitbuc
 GitHub Projects 보드는 지원하지 않습니다. TUI는 `/user`로 계정명을 확인해 폴더 이름으로 사용하고,
 batch는 다른 provider처럼 source.name을 폴더 이름으로 사용합니다.
 개인 batch 예제는 [batch.github-user.json](../examples/batch.github-user.json)을 참고하세요.
+
+## 서브모듈과 Git LFS
+
+`"submodules": true`이면 clone에 `--recurse-submodules`를 사용하고, 기존 저장소는 안전 검사와 fast-forward(또는 이미 최신 확인)가
+끝난 뒤 `git submodule update --init --recursive`를 실행합니다. 작업 트리가 깨끗한 경우에만 이 단계에 도달합니다.
+서브모듈 단계가 실패하면 해당 저장소를 `failed`로 집계합니다. 이미 끝난 fast-forward는 되돌리지 않습니다.
+서브모듈 URL 접근에도 로컬 Git 인증이 필요하며, `file`·`ext` 같은 프로토콜 허용 여부는 Git 기본 정책을 따릅니다.
+
+Git LFS는 별도 설정이 없습니다. git-lfs가 설치되어 있으면 Git이 clone·checkout 때 자동으로 파일을 받습니다.
+루트 `.gitattributes`에 `filter=lfs`가 있는데 git-lfs가 없으면 clone 직후와 `--status`에서 경고합니다.
+git-lfs를 설치한 뒤 해당 저장소에서 `git lfs pull`을 실행하세요.
 
 ## 직접 URL
 
