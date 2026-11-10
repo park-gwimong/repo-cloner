@@ -77,10 +77,10 @@ PC마다 저장소를 clone하지 않고 [pipx](https://pipx.pypa.io/)로 명령
 **버전 태그를 지정하면** 모든 PC가 같은 버전을 사용합니다.
 
 ```bash
-pipx install "git+https://github.com/park-gwimong/repo-cloner.git@v0.1.0"
+pipx install "git+https://github.com/park-gwimong/repo-cloner.git@v0.1.1"
 repo-cloner --version
-# 새 버전으로 바꿀 때 (태그를 바꿔 다시 설치)
-pipx install --force "git+https://github.com/park-gwimong/repo-cloner.git@v0.2.0"
+# 새 버전으로 바꿀 때: vX.Y.Z를 원하는 태그로 바꿔 다시 설치
+pipx install --force "git+https://github.com/park-gwimong/repo-cloner.git@vX.Y.Z"
 ```
 
 pipx가 없으면 `python -m pip install --user pipx` 후 `python -m pipx ensurepath`를 실행하고 터미널을 다시 여세요.
