@@ -5,6 +5,8 @@
 
 ## Unreleased
 
+## [0.2.0] - 2026-11-10
+
 ### 추가
 
 - GitHub source `skipArchived`·`skipForks`: 보관·fork 저장소 제외. 선택 화면에 `[archived]`·`[fork]` 표시.
