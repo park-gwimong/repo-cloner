@@ -1171,7 +1171,46 @@ def _inspect(repo: Repository, target: Path) -> tuple[str, str]:
     return state, detail
 
 
-def _status_report(tasks: list, listing_failed: int) -> int:
+def _count_repositories(folder: Path, depth: int) -> int:
+    """Count Git worktrees under folder, looking at most depth levels down."""
+    if depth <= 0:
+        return 0
+    total = 0
+    try:
+        children = list(folder.iterdir())
+    except OSError:
+        return 0
+    for child in children:
+        if child.name.startswith(".") or not child.is_dir() or child.is_symlink():
+            continue
+        total += 1 if _present(child / ".git") else _count_repositories(child, depth - 1)
+    return total
+
+
+def _report_top_level(root: Path, top_folders: set[str], counts: dict) -> None:
+    """Report folders directly under the destination that no source uses."""
+    try:
+        children = sorted(root.iterdir())
+    except OSError:
+        return
+    for child in children:
+        if (child.name.startswith(".") or not child.is_dir() or child.is_symlink()
+                or child.name.casefold() in top_folders):
+            continue
+        if _present(child / ".git"):
+            detail = "Git repository not in this configuration"
+        else:
+            # Old layouts nest repositories one or two levels down.
+            found = _count_repositories(child, 2)
+            if not found:
+                continue
+            detail = f"folder not used by this configuration ({found} Git repositories inside)"
+        counts["extra"] += 1
+        print(f"{'EXTRA':<8} {child.name} | {detail} | {child}", flush=True)
+
+
+def _status_report(tasks: list, listing_failed: int, root: Path | None = None,
+                   top_folders: set[str] | None = None) -> int:
     """Compare the configuration with the disk without fetching or changing anything."""
     counts = dict.fromkeys(_STATUS_STATES, 0)
     print("Status: local check only (no fetch); ahead/behind use each repository's last fetch", flush=True)
@@ -1201,6 +1240,13 @@ def _status_report(tasks: list, listing_failed: int) -> int:
                 continue
             counts[state] += 1
             print(f"{state.upper():<8} {label}/{child.name} | {detail} | {child}", flush=True)
+    if root is not None and top_folders is not None:
+        if listing_failed:
+            # A failed source's folder is unknown, so it could be misreported as EXTRA.
+            print("Top-level check skipped: a listing failed, so the configured folders are incomplete",
+                  flush=True)
+        else:
+            _report_top_level(root, top_folders, counts)
     print("Summary: " + " ".join(f"{key}={value}" for key, value in counts.items())
           + f" listing_failed={listing_failed}", flush=True)
     in_sync = not listing_failed and all(value == 0 for key, value in counts.items() if key != "ok")
@@ -1538,6 +1584,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
     origins = []  # index into expanded for each task, used to save a batch file
     targets = set()
     project_folders: dict[str, int] = {}
+    top_folders: set[str] = set()  # destination subfolders used by sources, for --status
     for index, (source, parts) in enumerate(expanded, 1):
         label = "/".join(parts)
         print(f"[{index}/{len(expanded)} {label}] Fetching repositories...", flush=True)
@@ -1558,6 +1605,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
             counts["failed"] += 1
             continue
         parent = root.joinpath(*parts)
+        top_folders.add(parts[0].casefold())
         print(f"[{label}] Found {len(repos)} repositories", flush=True)
         include = _patterns(source, "include")
         exclude = _patterns(source, "exclude")
@@ -1594,7 +1642,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         tasks = [tasks[index] for index in selected]
         origins = [origins[index] for index in selected]
     if status:
-        return _status_report(tasks, counts["failed"])
+        return _status_report(tasks, counts["failed"], root, top_folders)
     print(f"Targets: {len(tasks)} repositories", flush=True)
     preview = []
     print("# | Source / Repository | Action | Destination", flush=True)

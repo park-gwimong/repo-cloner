@@ -234,13 +234,15 @@ python repo_cloner.py --status --config batch.json
 | `MISSING` | 아직 clone하지 않음. batch가 clone |
 | `SKIP` | 로컬 변경·URL 불일치·detached HEAD 등. batch가 건너뛰는 사유와 같음 |
 | `WARN` | 서브모듈 미초기화, Git LFS를 쓰는데 git-lfs 미설치 등 |
-| `EXTRA` | 설정한 폴더 안에 있지만 설정에 없는 Git 저장소 |
+| `EXTRA` | 설정에 없는 Git 저장소, 또는 저장 경로 최상위에 있는데 어떤 source도 쓰지 않는 폴더 |
 | `PARTIAL` | 실패한 clone이 남긴 `.clone-*` 임시 폴더 |
 | `ERROR` | Git 검사 실패 |
 
 `--status`는 fetch하지 않으므로 원격의 최신 커밋은 반영하지 않습니다. 원격 목록 조회에는 batch와 같은 API 인증이 필요합니다.
 모든 항목이 `OK`이고 조회 실패가 없으면 종료 코드 0, 그 외에는 1입니다.
-EXTRA는 같은 source 폴더 안만 확인합니다. name 필터로 제외한 저장소가 그 폴더에 있으면 EXTRA로 표시됩니다.
+EXTRA는 source 폴더 안의 저장소와, 저장 경로 바로 아래 폴더 중 어떤 source도 쓰지 않으면서 Git 저장소가 있는 폴더(두 단계 안)를 표시합니다.
+저장소가 없는 일반 폴더와 `.`으로 시작하는 폴더는 표시하지 않습니다. name 필터로 제외한 저장소가 source 폴더에 있으면 EXTRA로 표시됩니다.
+목록 조회가 실패한 source가 있으면 최상위 검사는 건너뜁니다(어떤 폴더가 설정에 속하는지 확실하지 않기 때문입니다).
 
 저장된 batch는 TUI와 **같은 폴더 구조**(`<저장 경로>/<프로젝트명 또는 계정·조직명>/<저장소>`)를 만듭니다.
 저장 경로와 인증 파일 경로는 batch 파일 기준 상대 경로(`./...`), 홈 폴더 아래면 `~/...`로 기록하므로

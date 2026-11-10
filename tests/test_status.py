@@ -108,6 +108,51 @@ class StatusTests(GitTestCase):
         self.assertNotIn("plain-folder", output)
         self.assertIn("missing=1", output)
 
+    def status_with(self, sources):
+        config = self.fixture.root / "status.json"
+        config.write_text(json.dumps({"destination": str(self.dest), "sources": sources}), encoding="utf-8")
+        return self.run_quiet(app.run, config, status=True)
+
+    def team_source(self, **extra):
+        return {"name": "team", "provider": "git",
+                "repositories": [{"name": "target", "url": str(self.fixture.remote)}], **extra}
+
+    def test_top_level_reports_unconfigured_folders_with_repositories(self):
+        self.fixture.git(self.dest, "init", str(self.dest / "loose-repo"))
+        (self.dest / "old-layout" / "company").mkdir(parents=True)
+        self.fixture.git(self.dest, "init", str(self.dest / "old-layout" / "company" / "api"))
+        self.fixture.git(self.dest, "init", str(self.dest / "old-layout" / "web"))
+        (self.dest / "notes").mkdir()
+        (self.dest / ".cache").mkdir()
+        self.fixture.git(self.dest, "init", str(self.dest / ".cache" / "hidden-repo"))
+        # A configured source whose filter matches nothing still owns its folder.
+        (self.dest / "quiet").mkdir()
+        self.fixture.git(self.dest, "init", str(self.dest / "quiet" / "kept"))
+        code, output = self.status_with([self.team_source(), {
+            "name": "quiet", "provider": "git", "include": ["nothing-*"],
+            "repositories": [{"name": "kept", "url": str(self.fixture.remote)}]}])
+        self.assertEqual(code, 1)
+        self.assertIn("EXTRA    loose-repo | Git repository not in this configuration", output)
+        self.assertIn("EXTRA    old-layout | folder not used by this configuration (2 Git repositories inside)", output)
+        for quiet in ("notes", ".cache", "hidden-repo", "EXTRA    quiet", "EXTRA    team"):
+            self.assertNotIn(quiet, output)
+        self.assertIn("extra=2", output)
+
+    def test_top_level_check_is_skipped_when_a_listing_fails(self):
+        self.fixture.git(self.dest, "init", str(self.dest / "unknown"))
+        real = app.repositories
+
+        def listing(source, protocol):
+            if source["name"] == "broken":
+                raise app.ClonerError("API HTTP 503")
+            return real(source, protocol)
+        with patch.object(app, "repositories", side_effect=listing):
+            code, output = self.status_with([self.team_source(), {
+                "name": "broken", "provider": "github", "organization": "o"}])
+        self.assertEqual(code, 1)
+        self.assertIn("Top-level check skipped", output)
+        self.assertNotIn("EXTRA    unknown", output)
+
     def test_lfs_repository_warns_when_git_lfs_is_missing(self):
         (self.fixture.writer / ".gitattributes").write_text("*.bin filter=lfs diff=lfs merge=lfs -text\n",
                                                             encoding="utf-8")

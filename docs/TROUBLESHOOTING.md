@@ -77,7 +77,8 @@ Admin이나 Write를 선택해도 Read가 자동으로 포함되지 않습니다
 | `SKIP (HEAD is detached or unborn)` / `SKIP (missing or ambiguous upstream ...)` | 원격 추적 브랜치로 `git switch`하거나 `git branch --set-upstream-to` |
 | `WARN (submodules not initialized ...)` | batch를 실행하거나 `git submodule update --init --recursive` |
 | `WARN (uses Git LFS but git-lfs is not installed ...)` | git-lfs 설치 후 `git lfs install`, 해당 저장소에서 `git lfs pull` |
-| `EXTRA` | 필요한 저장소면 batch 설정에 추가하고, 아니면 직접 정리. 이 도구는 지우지 않음 |
+| `EXTRA` | 필요한 저장소면 batch 설정에 추가하고, 아니면 직접 정리. 이 도구는 지우지 않음. 최상위 폴더가 EXTRA면 예전 layout·source 이름으로 받은 폴더인지 확인 |
+| `Top-level check skipped: a listing failed ...` | 조회 실패 원인(인증·네트워크)을 해결한 뒤 다시 실행하면 최상위 검사도 수행 |
 | `PARTIAL` | 실패한 clone이 남긴 `.clone-*` 임시 폴더. 내용 확인 후 삭제하고 다시 실행 |
 | `ERROR` | 표시된 Git 오류 확인. `git status`가 해당 폴더에서 정상 동작하는지 확인 |
 
