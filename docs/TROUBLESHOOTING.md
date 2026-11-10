@@ -52,6 +52,7 @@ Admin이나 Write를 선택해도 Read가 자동으로 포함되지 않습니다
 | `credentials must be a nonempty path string` | `credentials` 값이 비었거나 문자열이 아님 |
 | `Folder '<이름>' is already used by another source; use distinct names or layout "source"` | `layout: "project"`에서 두 프로젝트·source가 같은 폴더(대소문자 무시)로 모임. 표시 이름을 바꾸거나 기본 layout 사용 |
 | `Project name '<이름>' cannot be used as a folder name; use layout "source"` | 프로젝트 표시 이름에 `/` 등 폴더에 쓸 수 없는 문자가 있음. 기본 layout 사용 |
+| `skipArchived is only supported for GitHub sources` | `skipArchived`·`skipForks`는 `github`·`github-user` source에만 지정 |
 | `layout must be source or project` / `submodules must be true or false` | 값의 철자·형식 확인. `submodules`는 따옴표 없는 `true`/`false` |
 | `Submodule update failed; the main repository is unchanged by this step (...)` | 서브모듈 URL 접근 권한(SSH 키·Git 인증)이나 서브모듈 안의 로컬 변경 확인. 본 저장소의 fast-forward는 이미 끝났을 수 있음 |
 

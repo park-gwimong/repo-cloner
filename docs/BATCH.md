@@ -158,8 +158,7 @@ Windows JSON 경로는 `D:/GitCopies`처럼 슬래시를 사용하면 편합니�
       "provider": "bitbucket-cloud",
       "workspace": "YOUR_WORKSPACE",
       "projects": ["APP", "OPS"],
-      "username": "you@example.com",
-      "token": "YOUR_TOKEN",
+      "credentials": "./repositories.json",
       "include": ["api-*", "web-*"],
       "exclude": ["*-archive"]
     }
@@ -173,6 +172,10 @@ Windows JSON 경로는 `D:/GitCopies`처럼 슬래시를 사용하면 편합니�
 
 필터는 API 조회 **후** 저장소 이름에 적용합니다. 대소문자를 구분하는 glob이며 `*`, `?`, `[abc]`를 지원합니다.
 include가 없거나 `[]`이면 전체가 후보입니다. include에 일치해도 exclude에 일치하면 제외됩니다.
+
+GitHub source는 `"skipArchived": true`로 보관(archived)된 저장소, `"skipForks": true`로 fork한 저장소를 제외할 수 있습니다.
+제외한 저장소는 `SKIP [source/repo] (archived)`처럼 사유와 함께 `skipped`에 집계됩니다. Bitbucket source에 지정하면 시작 단계에서 오류입니다.
+TUI·`-i` 선택 화면에서는 필터와 관계없이 GitHub 저장소 이름 뒤에 `[archived]`, `[fork]`를 표시합니다.
 패턴은 문자열 목록이어야 합니다. 필터 제외는 `skipped`에 포함되며 전부 제외되면 폴더를 만들지 않고 정상 종료합니다.
 
 ## 진행률과 종료 코드

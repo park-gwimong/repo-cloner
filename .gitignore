@@ -1,4 +1,8 @@
 /repositories.json
+# Credential files referenced by the examples
+/github.json
+/bitbucket-cloud.json
+/bitbucket-server.json
 /batch.json
 /clones/
 __pycache__/

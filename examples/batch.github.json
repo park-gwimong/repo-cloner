@@ -1,4 +1,5 @@
 {
+  "credentials": "./repositories.json",
   "destination": "./clones",
   "protocol": "ssh",
   "sources": [
@@ -6,9 +7,15 @@
       "name": "my-org",
       "provider": "github",
       "organization": "YOUR_ORGANIZATION",
-      "token": "YOUR_TOKEN",
-      "include": ["api-*", "web-*"],
-      "exclude": ["*-archive"]
+      "skipArchived": true,
+      "skipForks": true,
+      "include": [
+        "api-*",
+        "web-*"
+      ],
+      "exclude": [
+        "*-archive"
+      ]
     }
   ]
 }

@@ -90,6 +90,9 @@ class Repository:
     namespace: str | None = field(default=None, compare=False)
     # Initialize submodules on clone and after a safe update ("submodules": true).
     submodules: bool = field(default=False, compare=False)
+    # GitHub repository flags used by skipArchived / skipForks.
+    archived: bool = field(default=False, compare=False)
+    fork: bool = field(default=False, compare=False)
 
 
 def folder_name(value: str) -> str:
@@ -863,7 +866,8 @@ def repositories(source: dict, protocol: str) -> Iterator[Repository]:
                 raise ClonerError("Invalid GitHub repository list response")
             for item in items:
                 yield Repository(item["name"], item["ssh_url" if protocol == "ssh" else "clone_url"],
-                                 _namespace(item, "owner", "login"))
+                                 _namespace(item, "owner", "login"),
+                                 archived=item.get("archived") is True, fork=item.get("fork") is True)
             if len(items) < 100:
                 break
             page += 1
@@ -1191,6 +1195,30 @@ def _status_report(tasks: list, listing_failed: int) -> int:
     return 0 if in_sync else 1
 
 
+def _repo_tags(repo: Repository) -> str:
+    """Selection-menu hints such as " [archived]"."""
+    tags = [flag for _key, flag in _GITHUB_FLAGS if getattr(repo, flag)]
+    return "".join(f" [{tag}]" for tag in tags)
+
+
+_GITHUB_FLAGS = (("skipArchived", "archived"), ("skipForks", "fork"))
+
+
+def _github_flags(source: dict) -> list[tuple[str, str]]:
+    """Validate skipArchived / skipForks and return the enabled (setting, flag) pairs."""
+    enabled = []
+    for key, flag in _GITHUB_FLAGS:
+        if key not in source:
+            continue
+        if not isinstance(source[key], bool):
+            raise ClonerError(f"{key} must be true or false")
+        if source.get("provider") not in {"github", "github-user"}:
+            raise ClonerError(f"{key} is only supported for GitHub sources")
+        if source[key]:
+            enabled.append((key, flag))
+    return enabled
+
+
 def _patterns(source: dict, key: str) -> list[str]:
     value = source.get(key, [])
     if not isinstance(value, list) or any(
@@ -1474,6 +1502,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         names.add(name.casefold())
         _patterns(source, "include")
         _patterns(source, "exclude")
+        _github_flags(source)
         expanded.extend(_project_sources(source))
     sources = resolved_sources
     if destination is not None:
@@ -1519,9 +1548,15 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
         print(f"[{label}] Found {len(repos)} repositories", flush=True)
         include = _patterns(source, "include")
         exclude = _patterns(source, "exclude")
+        skip_flags = _github_flags(source)
         for repo in repos:
             try:
                 name = folder_name(repo.name)
+                flagged = next((flag for _key, flag in skip_flags if getattr(repo, flag)), None)
+                if flagged:
+                    print(f"SKIP  [{label}/{name}] ({flagged})", flush=True)
+                    counts["skipped"] += 1
+                    continue
                 if (
                     include and not any(fnmatchcase(name, pattern) for pattern in include)
                 ) or any(fnmatchcase(name, pattern) for pattern in exclude):
@@ -1541,7 +1576,7 @@ def run(config_path: Path, dry_run: bool = False, destination: Path | None = Non
                 counts["failed"] += 1
     if interactive:
         selected = select("Repositories", [
-            f"{label}/{repo.name} -> {parent / repo.name}" for repo, parent, label in tasks])
+            f"{label}/{repo.name}{_repo_tags(repo)} -> {parent / repo.name}" for repo, parent, label in tasks])
         counts["skipped"] += len(tasks) - len(selected)
         tasks = [tasks[index] for index in selected]
         origins = [origins[index] for index in selected]

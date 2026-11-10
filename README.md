@@ -31,7 +31,7 @@ Python 3.10 이상과 Git이 필요하며 런타임 외부 라이브러리는 �
 
 - GitHub 개인 계정·Organization, Bitbucket Cloud, Bitbucket Server / Data Center 및 직접 Git URL 지원
 - 키보드 TUI의 workspace → 프로젝트 → 저장소 선택과 저장 경로 편집
-- 여러 source·프로젝트를 처리하는 batch 및 include/exclude 이름 필터
+- 여러 source·프로젝트를 처리하는 batch 및 include/exclude 이름 필터, GitHub archived·fork 제외
 - TUI 선택을 토큰 없는 batch 파일로 저장해 다른 PC에서 같은 구성 재현
 - `--status`로 설정과 로컬 상태 비교 (미clone·push 안 한 커밋·로컬 변경·설정에 없는 저장소)
 - 선택적 서브모듈 초기화와 Git LFS 미설치 경고

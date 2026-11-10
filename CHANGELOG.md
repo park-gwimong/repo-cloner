@@ -5,8 +5,14 @@
 
 ## Unreleased
 
+### 추가
+
+- GitHub source `skipArchived`·`skipForks`: 보관·fork 저장소 제외. 선택 화면에 `[archived]`·`[fork]` 표시.
+
 ### 변경
 
+- batch 예제가 토큰 대신 `credentials`로 인증 파일을 참조. 중복된 batch.shared-credentials.json 제거.
+- 예제가 참조하는 인증 파일(github.json, bitbucket-cloud.json, bitbucket-server.json)을 Git 제외 대상에 추가.
 - 문제 해결 문서에 credentials·layout·submodules 오류, batch 저장, `--status` 상태별 해결 방법 추가.
 - CI 액션을 Node 24 기반 v7로 올리고 Dependabot으로 액션 버전을 매월 갱신.
 

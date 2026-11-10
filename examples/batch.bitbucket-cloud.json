@@ -1,4 +1,5 @@
 {
+  "credentials": "./repositories.json",
   "destination": "./clones",
   "protocol": "ssh",
   "sources": [
@@ -6,11 +7,14 @@
       "name": "company",
       "provider": "bitbucket-cloud",
       "workspace": "YOUR_WORKSPACE",
-      "projects": ["APP", "OPS"],
-      "username": "you@example.com",
-      "token": "YOUR_TOKEN",
+      "projects": [
+        "APP",
+        "OPS"
+      ],
       "include": [],
-      "exclude": ["*-archive"]
+      "exclude": [
+        "*-archive"
+      ]
     }
   ]
 }

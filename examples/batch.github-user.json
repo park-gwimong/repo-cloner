@@ -1,11 +1,13 @@
 {
+  "credentials": "./repositories.json",
   "destination": "./clones",
   "protocol": "ssh",
   "sources": [
     {
       "name": "my-github-account",
       "provider": "github-user",
-      "token": "YOUR_TOKEN",
+      "skipArchived": true,
+      "skipForks": false,
       "include": [],
       "exclude": []
     }

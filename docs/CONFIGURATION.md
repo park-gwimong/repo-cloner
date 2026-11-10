@@ -46,6 +46,8 @@ token만 있으면 Bearer 인증, `{}`는 익명 조회·직접 URL 용도입니
 | `exclude` | 문자열 배열 / `[]` | 저장소 이름 glob. include보다 우선 |
 | `credentials` | 선택 문자열 | 이 source만 쓸 인증 파일 경로. 최상위 credentials보다 우선 |
 | `submodules` | 선택 `true`/`false` | 이 source의 서브모듈 초기화 여부. 최상위 값보다 우선 |
+| `skipArchived` | 선택 `true`/`false` / `false` | GitHub 전용. 보관(archived)된 저장소 제외 |
+| `skipForks` | 선택 `true`/`false` / `false` | GitHub 전용. fork한 저장소 제외 |
 | `token` | 선택 문자열 | 실제 API 토큰. 환경변수 이름이 아님 |
 | `username` | 선택 문자열 | token과 함께 있으면 Basic 인증. token 없이 단독 사용 불가 |
 
