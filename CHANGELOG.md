@@ -5,6 +5,8 @@
 
 ## Unreleased
 
+## [0.2.1] - 2026-11-10
+
 ### 수정
 
 - 기존 저장소 검사·update 때 저장소 설정의 `core.fsmonitor` 명령이 실행되던 문제. 모든 Git 명령에 `-c core.fsmonitor=false` 적용.
