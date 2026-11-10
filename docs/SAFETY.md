@@ -42,7 +42,10 @@ local-only 또는 diverged 커밋은 보존하고 `skipped`로 끝납니다.
 `FETCH_HEAD`와 해당 tracking metadata/OID는 새 원격 상태를 반영할 수 있습니다.
 작업 파일, index, 로컬 branch 커밋은 보호됩니다.
 갱신 명령은 저장된 hook 설정을 바꾸지 않고 작업 트리 밖의 빈 임시 hook 디렉터리를
-사용합니다.
+사용합니다. 기존 저장소에 실행하는 모든 Git 명령(update와 `--status` 검사)은 `-c core.fsmonitor=false`로
+저장소 설정에 적힌 fsmonitor 명령도 실행하지 않습니다. 단, Git LFS 같은 파일 필터(`filter.<이름>.clean`)는
+`git status`·fast-forward 때 Git이 실행할 수 있습니다. 필터를 끄면 LFS 저장소가 동작하지 않으므로 막지 않습니다.
+신뢰할 수 없는 사람이 만든 폴더를 저장 경로 안에 두지 마세요.
 
 `--dry-run`은 API 목록 조회만 수행합니다. Git 실행, 임시 디렉터리 생성, clone,
 worktree 검사, 기존 디렉터리 갱신 자격 판정은 하지 않습니다. 없는 clone 대상과

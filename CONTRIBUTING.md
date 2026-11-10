@@ -36,7 +36,7 @@ git diff --check
 ```
 
 문서만 수정했다면 상대 링크·JSON 예제·복사한 예제의 dry-run 명령을 확인하세요.
-CI는 Python 3.10/3.13과 Windows/Linux/macOS에서 전체 테스트, 패키지 설치, 명령 도움말을 검사합니다.
+CI는 Python 3.10/3.13/3.14와 Windows/Linux/macOS에서 전체 테스트, 패키지 설치, 명령 도움말을 검사합니다.
 
 ## 릴리스
 

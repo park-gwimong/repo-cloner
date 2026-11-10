@@ -123,6 +123,20 @@ class StatusTests(GitTestCase):
         with patch.object(app, "_lfs_installed", return_value=True):
             self.assertEqual(self.status()[0], 0)
 
+    def test_repository_fsmonitor_command_is_never_run(self):
+        # A command in the repository's own config must not run during checks or updates.
+        self.fixture.push_change("two\n")
+        self.fixture.git(self.target, "fetch")
+        # Set after the helper's own fetch, which would run the command itself.
+        sentinel = self.fixture.root / "fsmonitor ran.txt"
+        self.fixture.git(self.target, "config", "core.fsmonitor",
+                         f"echo ran >> '{sentinel.as_posix()}'")
+        code, output = self.status()
+        self.assertIn("BEHIND", self.line(output, "target"))
+        result, _ = self.run_quiet(app.clone, app.Repository("target", str(self.fixture.remote)), self.team, False)
+        self.assertEqual(result, "updated")
+        self.assertFalse(sentinel.exists())
+
     def test_cli_status_mode(self):
         with patch("sys.argv", ["repo-cloner", "--status", "--config", "batch.json"]), \
                 patch("repo_cloner_tui.TerminalUI") as ui, \

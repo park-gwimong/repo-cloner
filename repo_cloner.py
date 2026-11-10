@@ -191,7 +191,9 @@ def _git(
 ) -> subprocess.CompletedProcess:
     """Run Git from one absolute cwd without invoking a shell."""
     target_abs = Path(os.path.abspath(os.fspath(target)))
-    command = ["git"]
+    # A repository's own config may name a command to run as core.fsmonitor;
+    # never run it, just as saved hooks are never run.
+    command = ["git", "-c", "core.fsmonitor=false"]
     if hooks_path is not None:
         hooks_abs = os.path.abspath(os.fspath(hooks_path))
         command.extend(["-c", f"core.hooksPath={hooks_abs}"])

@@ -414,7 +414,7 @@ python -m unittest discover -s tests -v
 
 테스트는 실제 API 토큰 없이 API 조회, 인증, TUI 설정·선택·취소, dry-run,
 임시 Git 원격을 이용한 안전한 갱신을 검증합니다. Git이 PATH에 있어야 합니다.
-GitHub Actions는 Windows/Linux/macOS와 Python 3.10/3.13 조합으로 테스트·설치·명령 도움말을 확인합니다.
+GitHub Actions는 Windows/Linux/macOS와 Python 3.10/3.13/3.14 조합으로 테스트·설치·명령 도움말을 확인합니다.
 개발 환경과 PR 검증 방법은 [CONTRIBUTING.md](CONTRIBUTING.md)를 보세요.
 버그 보고와 기능 제안은 [Issues](https://github.com/park-gwimong/repo-cloner/issues)에서 양식을 사용하세요.
 
